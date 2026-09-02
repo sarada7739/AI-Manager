@@ -3,11 +3,28 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 // T-002: 「shared は node:* / react を import しない」という受け入れ条件を検証する。
-// 行頭 import / export ... from の行だけを対象にし、コメント中の文字列は除外する。
+// T-003 引き継ぎ: node: 接頭辞なしの組み込みモジュール、副作用 import、動的 import も検出する。
+// 行頭 import / export ... from の行だけでなく、行内どこにあっても検出すべきもの（動的 import）は
+// 行全体（コメント行を除く）を対象にスキャンする。
 
 const SHARED_DIR = path.join(process.cwd(), "src", "shared");
 
-/** 対象行かどうか（行頭が import、または export ... from）を判定する。 */
+/** node:* 接頭辞なしでも Node.js 組み込みモジュールとして扱うべき名前の一覧。 */
+const BARE_BUILTIN_MODULES = [
+  "path",
+  "fs",
+  "os",
+  "child_process",
+  "util",
+  "events",
+  "stream",
+  "crypto",
+  "url",
+  "http",
+  "net",
+];
+
+/** 行頭が import、または export ... from の行かどうかを判定する。 */
 function isImportLikeLine(trimmed: string): boolean {
   if (trimmed.startsWith("import")) {
     return true;
@@ -16,19 +33,83 @@ function isImportLikeLine(trimmed: string): boolean {
   return /^export\b.*\bfrom\b/.test(trimmed);
 }
 
-/** node:* / react の import、および require( の使用を検出する（対象行のみ）。 */
+/**
+ * 行内から import/export/require が参照するモジュール指定子を抜き出す。
+ * 誤検出を避けるため、行頭が import/export の「import 風の行」に限定して適用する
+ * （そうでない行に from 節の正規表現をかけると、通常の文章中の
+ * 「... from "node:fs" ...」のような偶然の一致まで拾ってしまうため）。
+ */
+function extractStaticModuleSpecifiers(trimmed: string): string[] {
+  const specifiers: string[] = [];
+
+  // import ... from "x" / export ... from "x"
+  for (const m of trimmed.matchAll(/\bfrom\s+["']([^"']+)["']/g)) {
+    if (typeof m[1] === "string") {
+      specifiers.push(m[1]);
+    }
+  }
+  // 副作用 import: import "x";（from を伴わない）
+  const sideEffect = /^import\s+["']([^"']+)["']/.exec(trimmed);
+  if (sideEffect && typeof sideEffect[1] === "string") {
+    specifiers.push(sideEffect[1]);
+  }
+  // require("x")（TS の import x = require("x") 含む）
+  for (const m of trimmed.matchAll(/\brequire\(\s*["']([^"']+)["']\s*\)/g)) {
+    if (typeof m[1] === "string") {
+      specifiers.push(m[1]);
+    }
+  }
+
+  return specifiers;
+}
+
+/**
+ * 行内の動的 import("x") / await import("x") を抜き出す。
+ * `return import(...)` のように行頭が import/export でなくても書けるため、
+ * 行頭形状に関わらず（コメント行を除き）全行を対象にする。
+ */
+function extractDynamicImportSpecifiers(trimmed: string): string[] {
+  const specifiers: string[] = [];
+  for (const m of trimmed.matchAll(/\bimport\s*\(\s*["']([^"']+)["']\s*\)/g)) {
+    if (typeof m[1] === "string") {
+      specifiers.push(m[1]);
+    }
+  }
+  return specifiers;
+}
+
+/** モジュール指定子が禁止対象（node:*, react, 接頭辞なし組み込み）かどうかを判定する。 */
+function isBannedSpecifier(specifier: string): boolean {
+  if (specifier.startsWith("node:")) {
+    return true;
+  }
+  if (specifier === "react" || specifier.startsWith("react/") || specifier.startsWith("react-")) {
+    return true;
+  }
+  return BARE_BUILTIN_MODULES.some(
+    (builtin) => specifier === builtin || specifier.startsWith(`${builtin}/`),
+  );
+}
+
+/**
+ * node:* / react の import、接頭辞なし組み込みモジュールの import、
+ * 副作用 import、動的 import、require( の使用を検出する。
+ * コメント行（行頭が // のもの）は対象外。
+ */
 function findRuntimeImportViolations(content: string): string[] {
   const violations: string[] = [];
   for (const rawLine of content.split(/\r?\n/)) {
     const trimmed = rawLine.trim();
-    if (!isImportLikeLine(trimmed)) {
+    if (trimmed.startsWith("//")) {
       continue;
     }
-    if (
-      /from\s+["']node:/.test(trimmed) ||
-      /from\s+["']react/.test(trimmed) ||
-      /require\(/.test(trimmed)
-    ) {
+
+    const specifiers: string[] = [...extractDynamicImportSpecifiers(trimmed)];
+    if (isImportLikeLine(trimmed)) {
+      specifiers.push(...extractStaticModuleSpecifiers(trimmed));
+    }
+
+    if (specifiers.length > 0 && specifiers.some(isBannedSpecifier)) {
       violations.push(trimmed);
     }
   }
@@ -104,6 +185,90 @@ describe("findRuntimeImportViolations（検出ロジック自体の単体テス�
   it("空ファイルでは違反なし", () => {
     expect(findRuntimeImportViolations("")).toHaveLength(0);
   });
+
+  describe("node: 接頭辞なしの組み込みモジュール", () => {
+    it.each(BARE_BUILTIN_MODULES)("%s を接頭辞なしで import すると検出する", (mod) => {
+      const content = `import x from "${mod}";\n`;
+      expect(findRuntimeImportViolations(content)).toHaveLength(1);
+    });
+
+    it("サブパス（例: fs/promises）でも検出する", () => {
+      const content = 'import { readFile } from "fs/promises";\n';
+      expect(findRuntimeImportViolations(content)).toHaveLength(1);
+    });
+
+    it("似た名前だが別モジュール（path-browserify 等）は誤検出しない", () => {
+      const content = [
+        'import p from "path-browserify";',
+        'import u from "utility-belt";',
+        "",
+      ].join("\n");
+      expect(findRuntimeImportViolations(content)).toHaveLength(0);
+    });
+  });
+
+  describe("副作用 import（from を伴わない）", () => {
+    it('import "node:fs"; を検出する', () => {
+      const content = 'import "node:fs";\n';
+      expect(findRuntimeImportViolations(content)).toHaveLength(1);
+    });
+
+    it('接頭辞なしの import "fs"; も検出する', () => {
+      const content = "import 'fs';\n";
+      expect(findRuntimeImportViolations(content)).toHaveLength(1);
+    });
+
+    it("自ファイル内の副作用 import（相対パス）は検出しない", () => {
+      const content = 'import "./polyfill";\n';
+      expect(findRuntimeImportViolations(content)).toHaveLength(0);
+    });
+  });
+
+  describe("動的 import", () => {
+    it('import("node:fs") を検出する', () => {
+      const content = 'const mod = await import("node:fs");\n';
+      expect(findRuntimeImportViolations(content)).toHaveLength(1);
+    });
+
+    it('接頭辞なしの import("fs") も検出する', () => {
+      const content = "if (x) { void import('fs'); }\n";
+      expect(findRuntimeImportViolations(content)).toHaveLength(1);
+    });
+
+    it("行頭が import/export でなくても検出する（変数代入など）", () => {
+      const content = 'export function load() { return import("node:child_process"); }\n';
+      expect(findRuntimeImportViolations(content)).toHaveLength(1);
+    });
+
+    it("動的 import でもローカルモジュールは検出しない", () => {
+      const content = 'const mod = await import("./local-module");\n';
+      expect(findRuntimeImportViolations(content)).toHaveLength(0);
+    });
+
+    it("コメント中の動的 import 文字列は無視する", () => {
+      const content = [
+        '// 禁止: import("node:fs") のような動的 import は使わないこと',
+        "export const noop = (): void => {};",
+        "",
+      ].join("\n");
+      expect(findRuntimeImportViolations(content)).toHaveLength(0);
+    });
+  });
+});
+
+describe("isImportLikeLine（従来の行頭判定、後方互換の確認）", () => {
+  it("import で始まる行は true", () => {
+    expect(isImportLikeLine('import x from "y";')).toBe(true);
+  });
+
+  it("export ... from の行は true", () => {
+    expect(isImportLikeLine('export { x } from "y";')).toBe(true);
+  });
+
+  it("通常のコード行は false", () => {
+    expect(isImportLikeLine("export const noop = () => {};")).toBe(false);
+    expect(isImportLikeLine('const mod = await import("y");')).toBe(false);
+  });
 });
 
 describe("src/shared/**/*.ts の実ファイル検証", () => {
@@ -118,7 +283,7 @@ describe("src/shared/**/*.ts の実ファイル検証", () => {
   });
 
   it.each(files.length > 0 ? files : ["(no-file)"])(
-    "%s に node:* / react の import / require が無い",
+    "%s に node:* / react /接頭辞なし組み込み / 動的 import の禁止参照が無い",
     (file) => {
       if (file === "(no-file)") {
         return;
