@@ -107,7 +107,7 @@ interface SessionSummary {
   title: string;               // 決定順は DESIGN.md §8 / RESEARCH.md §2.5
   lastMessage: string;         // マスク済み、先頭 200 文字
   lastRole: "user" | "assistant" | null;
-  cwd: string;                 // 表示用に ~ 置換済みの文字列（実パスは API に出すが UI で短縮）
+  cwd: string;                 // 実パス（API はローカル専用なのでそのまま返す。UI が ~ 置換と先頭省略を行う。ログには出さない）
   branch: string | null;       // "HEAD" は null に正規化
   model: string | null;
   entrypoint: "cli" | "claude-desktop" | "codex-exec" | "codex-tui" | "unknown";
