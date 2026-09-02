@@ -1,0 +1,14 @@
+/*
+ * ローディングスケルトン。矩形の行のみ。アニメーションは付けない（DESIGN.md §6.9）。
+ */
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.row {
+  height: var(--row-height);
+  background: var(--color-surface-3);
+  border-radius: var(--radius-sm);
+}

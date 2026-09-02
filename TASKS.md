@@ -1,9 +1,9 @@
 # TASKS.md — タスク台帳（進捗の唯一の真実）
 
 ## 進捗サマリ
-- 全 26 件 / 完了 10 件 / 進行中 3 件 / 未着手 13 件
-- 現在のタスク: T-009（次に着手）。T-010 / T-011 / T-017 はレビュー中（並列）
-- 最終更新: 2026-09-03T07:30:00+09:00
+- 全 26 件 / 完了 11 件 / 進行中 3 件 / 未着手 12 件
+- 現在のタスク: T-009（実装中）。T-010 / T-011 はレビュー中（並列）
+- 最終更新: 2026-09-03T07:40:00+09:00
 
 ## フェーズ進捗
 
@@ -29,7 +29,7 @@
 | T-006 | サーバ設定の読込と安全パス検証 | T-002 | done | 3 | #12 |
 | T-007 | ファイル先頭 / 末尾の部分読み取り | T-002 | done | 2 | #10 |
 | T-008 | Claude セッションの探索（locator） | T-006 | done | 1 | #13 |
-| T-009 | Claude JSONL のサマリ解析（parser） | T-007, T-008 | todo | 0 | - |
+| T-009 | Claude JSONL のサマリ解析（parser） | T-007, T-008 | in_progress | 1 | - |
 | T-010 | Claude 稼働メタとプロセス列挙 | T-004, T-006 | review | 1 | - |
 | T-011 | Codex rollout の探索と解析 | T-007, T-006 | review | 1 | - |
 | T-012 | セッション索引とアカウント合成 | T-009, T-010, T-011 | todo | 0 | - |
@@ -37,7 +37,7 @@
 | T-014 | セッション詳細 API とメッセージ抽出 | T-003, T-013 | todo | 0 | - |
 | T-015 | ファイル監視・ポーリング・SSE・refresh | T-013 | todo | 0 | - |
 | T-016 | デザイントークンとグローバルスタイル | T-001 | done | 1 | #9 |
-| T-017 | 汎用 UI コンポーネント | T-016 | review | 1 | - |
+| T-017 | 汎用 UI コンポーネント | T-016 | done | 1 | #14 |
 | T-018 | グルーピング・絞り込み・並べ替えの純粋関数 | T-002, T-005 | done | 3 | #11 |
 | T-019 | クライアント基盤（API クライアント / ストア / URL 同期） | T-013, T-018 | todo | 0 | - |
 | T-020 | App シェルとヘッダ帯 | T-017, T-019 | todo | 0 | - |
@@ -249,15 +249,16 @@
 ### T-017 汎用 UI コンポーネント
 - **目的**: DESIGN.md §6 の部品を先に揃える
 - **受け入れ条件**:
-  - [ ] `Dot`（state → 色 + 形 + `aria-label`。`running ●` / `active ◐` / `idle ○` / `error ▲`）
-  - [ ] `Pill`（`tool` / `state` / `filter` の 3 種。輪郭のみ。`filter` は `selected` で背景変化）
-  - [ ] `Button`（`primary` / `ghost`。`disabled` 時は `reason` を隣に表示し `aria-disabled`）
-  - [ ] `Toggle`（ラベル必須。`aria-checked`。キーボードで切替）
-  - [ ] `EmptyState`（メッセージ + 次の行動）、`Loading`（スケルトン 3 行、アニメーションなし）、`ErrorBanner`（message + hint）
-  - [ ] すべて CSS Modules。トークン以外の値なし。各コンポーネントに表示テストが書ける props 設計
+  - [x] `Dot`（state → 色 + 形 + `aria-label`。`running ●` / `active ◐` / `idle ○` / `error ▲`）
+  - [x] `Pill`（`tool` / `state` / `filter` の 3 種。輪郭のみ。`filter` は `selected` で背景変化）
+  - [x] `Button`（`primary` / `ghost`。`disabled` 時は `reason` を隣に表示し `aria-disabled`）
+  - [x] `Toggle`（ラベル必須。`aria-checked`。キーボードで切替）
+  - [x] `EmptyState`（メッセージ + 次の行動）、`Loading`（スケルトン 3 行、アニメーションなし）、`ErrorBanner`（message + hint）
+  - [x] すべて CSS Modules。トークン以外の値なし。各コンポーネントに表示テストが書ける props 設計
 - **参照**: DESIGN.md §6.3, §6.5〜§6.10, §7
 - **触ってよい範囲**: `src/client/components/**`, `vitest.config.ts`（setupFiles と client プロジェクトの include 拡張のみ）, `tests/setup/**`
 - **T-001 レビューからの引き継ぎ**: `vitest.config.ts` の client プロジェクトに `@testing-library/jest-dom` の `setupFiles` を追加し、include を `src/client/**/*.test.{ts,tsx}` と `tests/**/*.tsx` に広げ、node 側から `src/client` を除く
+- **T-017 レビューからの引き継ぎ（下流 UI 全般）**: `components/index.ts` から import する。`Pill` は全種別に `--tracking-wide` が乗る（DESIGN.md §3.2「英字ラベルのみ」と §6.3 の記述揺れ。文書側で要整理）。`tests/unit/client/components-css-tokens.test.ts` は `calc()` 内に `var()` を含まない生値（`calc(100% - 5px)`）や `rgba()` / 名前付き色を検出できないので、feature の CSS を足す際は検査を強化する。`Toggle` は `<form>` 内で Enter のフォーム送信を抑止する（第 1 段階は送信なしなので影響なし）
 
 ### T-018 グルーピング・絞り込み・並べ替えの純粋関数
 - **目的**: F-3 / F-4 のロジックを UI から切り離す
