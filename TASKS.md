@@ -1,9 +1,9 @@
 # TASKS.md — タスク台帳（進捗の唯一の真実）
 
 ## 進捗サマリ
-- 全 26 件 / 完了 12 件 / 進行中 2 件 / 未着手 12 件
-- 現在のタスク: T-009（テスト中）。T-010 はレビュー Round 2 中
-- 最終更新: 2026-09-03T07:50:00+09:00
+- 全 26 件 / 完了 13 件 / 進行中 1 件 / 未着手 12 件
+- 現在のタスク: T-009（レビュー中）。次は T-012
+- 最終更新: 2026-09-03T08:00:00+09:00
 
 ## フェーズ進捗
 
@@ -30,7 +30,7 @@
 | T-007 | ファイル先頭 / 末尾の部分読み取り | T-002 | done | 2 | #10 |
 | T-008 | Claude セッションの探索（locator） | T-006 | done | 1 | #13 |
 | T-009 | Claude JSONL のサマリ解析（parser） | T-007, T-008 | in_progress | 1 | - |
-| T-010 | Claude 稼働メタとプロセス列挙 | T-004, T-006 | review | 1 | - |
+| T-010 | Claude 稼働メタとプロセス列挙 | T-004, T-006 | done | 2 | #16 |
 | T-011 | Codex rollout の探索と解析 | T-007, T-006 | done | 2 | #15 |
 | T-012 | セッション索引とアカウント合成 | T-009, T-010, T-011 | todo | 0 | - |
 | T-013 | Hono API: sessions / accounts / health | T-012 | todo | 0 | - |
@@ -166,13 +166,14 @@
 ### T-010 Claude 稼働メタとプロセス列挙
 - **目的**: `sessions/<pid>.json` とプロセス一覧から running を判定する材料を集める
 - **受け入れ条件**:
-  - [ ] `readRunningMeta(root)` が `sessions/*.json` を読み、型ガードを通った `{ pid, sessionId, cwd, startedAt, procStart, entrypoint, version }` の配列を返す。`.key` は開かない。壊れた json は警告してスキップ
-  - [ ] `listProcesses()` が PowerShell（`Get-CimInstance Win32_Process`）を固定引数で 1 回だけ起動し、`{ pid, name, creationFileTime, commandLine }` の配列を返す。名前が `claude` / `codex` で始まるものだけに絞る
-  - [ ] 結果を 2 秒キャッシュする。子プロセス起動に失敗したら `{ available: false }` を返し例外を投げない
-  - [ ] `matchRunning(meta, processes)` が pid 一致かつ `procStart === creationFileTime` のときだけ `alive: true, procStartMatches: true` を返す
-  - [ ] コマンドライン中の `--resume=<id>` を抽出できる（補助情報）
+  - [x] `readRunningMeta(root)` が `sessions/*.json` を読み、型ガードを通った `{ pid, sessionId, cwd, startedAt, procStart, entrypoint, version }` の配列を返す。`.key` は開かない。壊れた json は警告してスキップ
+  - [x] `listProcesses()` が PowerShell（`Get-CimInstance Win32_Process`）を固定引数で 1 回だけ起動し、`{ pid, name, creationFileTime, commandLine }` の配列を返す。名前が `claude` / `codex` で始まるものだけに絞る
+  - [x] 結果を 2 秒キャッシュする。子プロセス起動に失敗したら `{ available: false }` を返し例外を投げない
+  - [x] `matchRunning(meta, processes)` が pid 一致かつ `procStart === creationFileTime` のときだけ `alive: true, procStartMatches: true` を返す
+  - [x] コマンドライン中の `--resume=<id>` を抽出できる（補助情報）
 - **参照**: RESEARCH.md §2.2, §5 / ADR-0003
 - **触ってよい範囲**: `src/server/sources/claude/running.ts`, `src/server/sources/process/list.ts`
+- **T-010 レビューからの引き継ぎ（T-012 / T-013）**: `procStart` の突合は 1 秒の許容差（ADR-0003 追記）。`ProcessInfo.commandLine` には `codex exec "<プロンプト>"` の本文やトークンが入り得るので、API 応答・ログに載せる場合は必ず `shared/masking.ts` を通す（索引では `--resume` の id 抽出と Codex threadId 突合にだけ使い、そのまま返さない）。`listProcesses` の `available: false` は `stateReason: "no-process-info"` と `health.processInfo: false` に反映する
 
 ### T-011 Codex rollout の探索と解析
 - **目的**: Codex を同じ Session 抽象に載せる

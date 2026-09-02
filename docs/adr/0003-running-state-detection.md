@@ -23,6 +23,7 @@ Windows では `ps` が使えず、プロセス列挙は PowerShell / `tasklist`
 - プロセス列挙は `Get-CimInstance Win32_Process` を子プロセスで実行し、結果を 1 秒以上キャッシュする。
 - 列挙に失敗した場合は `running` 判定を諦め、`active` / `idle` のみで表示し、「プロセス情報なし」を明示する。
 - `.key` ファイルとロックファイルの有無は判定に使わない。
+- `procStart` と `Get-CimInstance` の `CreationDate` の突合は **1 秒（FILETIME で 10,000,000 ticks）の許容差** で行う（2026-09-03 追記、T-010）。理由: `procStart` は JSON 数値として 2^53 を超え JS では下位桁が丸められ、CIM の `CreationDate` はマイクロ秒精度で FILETIME の下位桁が落ちるため、厳密一致は成立しない。実誤差は数十 ticks だが、狭すぎると稼働中セッションが「稼働中でない」側に静かに倒れるため 1 秒とした。PID 再利用が 1 秒以内に起きる可能性は無視できる。
 
 ## 結果
 
