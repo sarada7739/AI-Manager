@@ -1,9 +1,9 @@
 # TASKS.md — タスク台帳（進捗の唯一の真実）
 
 ## 進捗サマリ
-- 全 26 件 / 完了 1 件 / 進行中 0 件 / 未着手 25 件
-- 現在のタスク: T-002
-- 最終更新: 2026-09-02T23:40:00+09:00
+- 全 26 件 / 完了 2 件 / 進行中 0 件 / 未着手 24 件
+- 現在のタスク: T-003
+- 最終更新: 2026-09-03T00:05:00+09:00
 
 ## フェーズ進捗
 
@@ -22,7 +22,7 @@
 | ID | タイトル | 依存 | 状態 | ループ回数 | PR |
 |---|---|---|---|---|---|
 | T-001 | プロジェクト初期化（pnpm / Vite / Hono / Biome / Vitest / scripts） | - | done | 1 | #4 |
-| T-002 | 共有型定義と Result 型 | T-001 | todo | 0 | - |
+| T-002 | 共有型定義と Result 型 | T-001 | done | 1 | #5 |
 | T-003 | 秘密情報マスク関数 | T-002 | todo | 0 | - |
 | T-004 | 稼働状態の判定関数 | T-002 | todo | 0 | - |
 | T-005 | 相対時刻とパス短縮の整形関数 | T-002 | todo | 0 | - |
@@ -88,6 +88,7 @@
   - [ ] 置換した件数を返す `maskSecretsWithCount` もある
 - **参照**: DESIGN.md §8 / ARCHITECTURE.md §7
 - **触ってよい範囲**: `src/shared/masking.ts`
+- **T-002 レビューからの引き継ぎ（tester）**: `tests/unit/shared/no-runtime-imports.test.ts` を強化する。`node:` 接頭辞なしの組み込み（`path`, `fs`, `os`, `child_process` など）、副作用 import（`import "node:fs"`）、動的 import（`import("node:fs")`）も検出すること
 
 ### T-004 稼働状態の判定関数
 - **目的**: ADR-0003 の 3 段階判定を純粋関数にする
@@ -206,6 +207,7 @@
   - [ ] `app.request()` で統合テストできるよう `createApp(deps)` を分離する
 - **参照**: ARCHITECTURE.md §5
 - **触ってよい範囲**: `src/server/app.ts`, `src/server/index.ts`, `src/server/routes/sessions.ts`, `src/server/routes/accounts.ts`, `src/server/routes/health.ts`
+- **T-002 レビューからの引き継ぎ**: `AppError`（hint 任意）→ `ApiError`（hint 必須）の変換 `toApiError()` を `src/server/errors.ts` に 1 か所だけ置き、hint 未設定時の既定文言（「時間をおいて「更新」を押してください」）を決める
 - **T-001 レビューからの引き継ぎ**: `/api/health` を `index.ts` から `routes/health.ts` へ移す。`serve()` 失敗（EADDRINUSE 等）時に `log.error` で「何が起きたか + 次にどうするか」を出す。`createApp()` を export して `app.request()` の統合テストを必ず追加する。サーバ側の相対 import は `.js` 拡張子付き（`tsconfig.server.json` が NodeNext のため）
 
 ### T-014 セッション詳細 API とメッセージ抽出
