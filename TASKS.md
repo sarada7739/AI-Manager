@@ -1,9 +1,9 @@
 # TASKS.md — タスク台帳（進捗の唯一の真実）
 
 ## 進捗サマリ
-- 全 26 件 / 完了 0 件 / 進行中 0 件 / 未着手 26 件
-- 現在のタスク: T-001
-- 最終更新: 2026-09-02T23:20:00+09:00
+- 全 26 件 / 完了 1 件 / 進行中 0 件 / 未着手 25 件
+- 現在のタスク: T-002
+- 最終更新: 2026-09-02T23:40:00+09:00
 
 ## フェーズ進捗
 
@@ -11,8 +11,8 @@
 |---|---|---|---|
 | 0 | 実機調査 | done | #1 |
 | 1 | ハーネス文書生成 | done | #2 |
-| 2 | タスク分解 | in_progress | - |
-| 3 | タスク実行ループ | todo | - |
+| 2 | タスク分解 | done | #3 |
+| 3 | タスク実行ループ | in_progress | - |
 | 4 | 最終レビュー | todo | - |
 
 ## タスク一覧
@@ -21,7 +21,7 @@
 
 | ID | タイトル | 依存 | 状態 | ループ回数 | PR |
 |---|---|---|---|---|---|
-| T-001 | プロジェクト初期化（pnpm / Vite / Hono / Biome / Vitest / scripts） | - | todo | 0 | - |
+| T-001 | プロジェクト初期化（pnpm / Vite / Hono / Biome / Vitest / scripts） | - | done | 1 | #4 |
 | T-002 | 共有型定義と Result 型 | T-001 | todo | 0 | - |
 | T-003 | 秘密情報マスク関数 | T-002 | todo | 0 | - |
 | T-004 | 稼働状態の判定関数 | T-002 | todo | 0 | - |
@@ -206,6 +206,7 @@
   - [ ] `app.request()` で統合テストできるよう `createApp(deps)` を分離する
 - **参照**: ARCHITECTURE.md §5
 - **触ってよい範囲**: `src/server/app.ts`, `src/server/index.ts`, `src/server/routes/sessions.ts`, `src/server/routes/accounts.ts`, `src/server/routes/health.ts`
+- **T-001 レビューからの引き継ぎ**: `/api/health` を `index.ts` から `routes/health.ts` へ移す。`serve()` 失敗（EADDRINUSE 等）時に `log.error` で「何が起きたか + 次にどうするか」を出す。`createApp()` を export して `app.request()` の統合テストを必ず追加する。サーバ側の相対 import は `.js` 拡張子付き（`tsconfig.server.json` が NodeNext のため）
 
 ### T-014 セッション詳細 API とメッセージ抽出
 - **目的**: 詳細パネル用に最近のメッセージを返す
@@ -250,7 +251,8 @@
   - [ ] `EmptyState`（メッセージ + 次の行動）、`Loading`（スケルトン 3 行、アニメーションなし）、`ErrorBanner`（message + hint）
   - [ ] すべて CSS Modules。トークン以外の値なし。各コンポーネントに表示テストが書ける props 設計
 - **参照**: DESIGN.md §6.3, §6.5〜§6.10, §7
-- **触ってよい範囲**: `src/client/components/**`
+- **触ってよい範囲**: `src/client/components/**`, `vitest.config.ts`（setupFiles と client プロジェクトの include 拡張のみ）, `tests/setup/**`
+- **T-001 レビューからの引き継ぎ**: `vitest.config.ts` の client プロジェクトに `@testing-library/jest-dom` の `setupFiles` を追加し、include を `src/client/**/*.test.{ts,tsx}` と `tests/**/*.tsx` に広げ、node 側から `src/client` を除く
 
 ### T-018 グルーピング・絞り込み・並べ替えの純粋関数
 - **目的**: F-3 / F-4 のロジックを UI から切り離す
@@ -351,3 +353,4 @@
   - [ ] README の手順どおりに `pnpm install` → `pnpm dev` で起動できる
 - **参照**: harness.md §10 / ARCHITECTURE.md §8
 - **触ってよい範囲**: `e2e/**`, `README.md`, `playwright.config.ts`, `package.json`（e2e script のみ）
+- **T-001 レビューからの引き継ぎ**: `playwright.config.ts` の `baseURL` は Hono のポートを指しているが静的配信をしていない。`webServer` でサーバとクライアントを起動する形に見直す
