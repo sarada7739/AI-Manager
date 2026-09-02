@@ -1,0 +1,29 @@
+/*
+ * 状態ドット。塗りつぶし円 / 半円 / 輪郭円 / 三角形で状態を区別する（DESIGN.md §2.4）。
+ */
+.dot {
+  display: inline-block;
+  width: var(--dot-size);
+  height: var(--dot-size);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.running {
+  background: var(--color-signal);
+}
+
+.active {
+  background: linear-gradient(90deg, var(--color-working) 50%, transparent 50%);
+}
+
+.idle {
+  background: transparent;
+  border: 1px solid var(--color-text-3);
+}
+
+.error {
+  background: var(--color-danger);
+  border-radius: 0;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}

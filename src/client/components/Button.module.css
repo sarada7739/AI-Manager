@@ -1,0 +1,47 @@
+/*
+ * primary / ghost ボタン。無効時は理由を隣の要素で示す（DESIGN.md §6.6）。
+ */
+.wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--control-height);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--easing),
+    border-color var(--duration-fast) var(--easing);
+}
+
+.primary {
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+.ghost {
+  background: transparent;
+  border-color: var(--color-border-strong);
+  color: var(--color-text-2);
+}
+
+.disabled {
+  background: var(--color-surface-3);
+  color: var(--color-text-muted);
+  border-color: transparent;
+  cursor: not-allowed;
+}
+
+.reason {
+  font-size: var(--text-xs);
+  color: var(--color-text-3);
+}

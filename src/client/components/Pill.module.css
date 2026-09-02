@@ -1,0 +1,49 @@
+/*
+ * 輪郭ピル。塗りつぶさず 1px の境界線 + 同色の文字で種別を示す（DESIGN.md §6.3）。
+ */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  border: 1px solid currentColor;
+  border-radius: var(--radius-pill);
+  padding: 1px var(--space-2);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  letter-spacing: var(--tracking-wide);
+  background: transparent;
+  font-family: inherit;
+}
+
+.tool {
+  color: var(--color-text-2);
+}
+
+.state.running {
+  color: var(--color-signal);
+}
+
+.state.active {
+  color: var(--color-working);
+}
+
+.state.idle {
+  color: var(--color-text-3);
+}
+
+.state.error {
+  color: var(--color-danger);
+}
+
+.filter {
+  color: var(--color-text-2);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--easing),
+    border-color var(--duration-fast) var(--easing);
+}
+
+.filter.selected {
+  background: var(--color-surface-3);
+  border-color: var(--color-border-strong);
+}
