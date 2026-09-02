@@ -1,9 +1,9 @@
 # TASKS.md — タスク台帳（進捗の唯一の真実）
 
 ## 進捗サマリ
-- 全 26 件 / 完了 6 件 / 進行中 3 件 / 未着手 17 件
-- 現在のタスク: T-006, T-007, T-018（並列。round 2）
-- 最終更新: 2026-09-03T02:30:00+09:00
+- 全 26 件 / 完了 9 件 / 進行中 0 件 / 未着手 17 件
+- 現在のタスク: T-008（次に着手。T-009 / T-010 / T-011 / T-017 は並列可）
+- 最終更新: 2026-09-03T03:20:00+09:00
 
 ## フェーズ進捗
 
@@ -26,8 +26,8 @@
 | T-003 | 秘密情報マスク関数 | T-002 | done | 2 | #7 |
 | T-004 | 稼働状態の判定関数 | T-002 | done | 1 | #6 |
 | T-005 | 相対時刻とパス短縮の整形関数 | T-002 | done | 2 | #8 |
-| T-006 | サーバ設定の読込と安全パス検証 | T-002 | in_progress | 2 | - |
-| T-007 | ファイル先頭 / 末尾の部分読み取り | T-002 | in_progress | 2 | - |
+| T-006 | サーバ設定の読込と安全パス検証 | T-002 | done | 3 | #12 |
+| T-007 | ファイル先頭 / 末尾の部分読み取り | T-002 | done | 2 | #10 |
 | T-008 | Claude セッションの探索（locator） | T-006 | todo | 0 | - |
 | T-009 | Claude JSONL のサマリ解析（parser） | T-007, T-008 | todo | 0 | - |
 | T-010 | Claude 稼働メタとプロセス列挙 | T-004, T-006 | todo | 0 | - |
@@ -38,7 +38,7 @@
 | T-015 | ファイル監視・ポーリング・SSE・refresh | T-013 | todo | 0 | - |
 | T-016 | デザイントークンとグローバルスタイル | T-001 | done | 1 | #9 |
 | T-017 | 汎用 UI コンポーネント | T-016 | todo | 0 | - |
-| T-018 | グルーピング・絞り込み・並べ替えの純粋関数 | T-002, T-005 | in_progress | 2 | - |
+| T-018 | グルーピング・絞り込み・並べ替えの純粋関数 | T-002, T-005 | done | 3 | #11 |
 | T-019 | クライアント基盤（API クライアント / ストア / URL 同期） | T-013, T-018 | todo | 0 | - |
 | T-020 | App シェルとヘッダ帯 | T-017, T-019 | todo | 0 | - |
 | T-021 | フィルタバーと読み取り専用トグル | T-020 | todo | 0 | - |
@@ -207,6 +207,8 @@
   - [ ] `app.request()` で統合テストできるよう `createApp(deps)` を分離する
 - **参照**: ARCHITECTURE.md §5
 - **触ってよい範囲**: `src/server/app.ts`, `src/server/index.ts`, `src/server/routes/sessions.ts`, `src/server/routes/accounts.ts`, `src/server/routes/health.ts`
+- **T-006 レビューからの引き継ぎ（log.ts）**: `maskDeep` が `Date` / `Map` / `Error` を `{}` に潰す（`Date` は ISO 文字列に、非プレーンは `String()` に）。`fields` が `level` / `at` / `message` を上書きできる（予約キーを後ろに）。循環参照で RangeError（深さ上限 + write 全体の try/catch）。`~/.claude/projects/C--Users-<name>-…` のダッシュ符号化ディレクトリ名がマスクされない（homeDir をダッシュ化した形も置換規則に加える）。`path.isAbsolute("/x")` が Windows で true（ドライブレターまたは UNC を要求）
+- **T-018 レビューからの引き継ぎ（下流全般）**: `SessionGroup.key` は folder 軸だけ正規化済み小文字。表示には必ず `label` を使う。URL 同期で `folder=""` は `null` に落とす（T-019）
 - **T-002 レビューからの引き継ぎ**: `AppError`（hint 任意）→ `ApiError`（hint 必須）の変換 `toApiError()` を `src/server/errors.ts` に 1 か所だけ置き、hint 未設定時の既定文言（「時間をおいて「更新」を押してください」）を決める
 - **T-001 レビューからの引き継ぎ**: `/api/health` を `index.ts` から `routes/health.ts` へ移す。`serve()` 失敗（EADDRINUSE 等）時に `log.error` で「何が起きたか + 次にどうするか」を出す。`createApp()` を export して `app.request()` の統合テストを必ず追加する。サーバ側の相対 import は `.js` 拡張子付き（`tsconfig.server.json` が NodeNext のため）
 
