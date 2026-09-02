@@ -20,6 +20,7 @@
   - Claude CLI 起動: `claude:cli`
   - Codex: `codex:<model_provider>`
 - 表示名は `local-data/accounts.json`（`.gitignore` 済み）の `{ "<key>": "<表示名>" }` で上書きする。未設定時は `Claude Desktop 1`、`Claude CLI`、`Codex` のような既定名を使い、UUID を画面に出さない。
+- 既定名の採番（2026-09-03 追記、T-012）: `Claude Desktop N` の N は、その uuid のセッションのうち最も古い `firstAt`（無ければ `updatedAt`）が早い順に 1 から振る。Codex は `model_provider` が 1 種類なら「Codex」、2 種類以上あるときだけ「Codex (provider)」とする。セッションの削除で番号がずれ得るが、表示名の上書きで固定できるため許容する。実際の上書き元は `local-data/config.json` の `accounts`（T-006 で設定を 1 ファイルに統合した）。
 - アカウントの「起動中 / 停止」と「起動時刻」は、そのキーに属する `running` セッションの有無と最古の `startedAt` から導く。
 
 ## 結果

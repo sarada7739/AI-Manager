@@ -1,9 +1,9 @@
 # TASKS.md — タスク台帳（進捗の唯一の真実）
 
 ## 進捗サマリ
-- 全 26 件 / 完了 14 件 / 進行中 0 件 / 未着手 12 件
-- 現在のタスク: T-012（次に着手。sources が揃ったので索引を組む）
-- 最終更新: 2026-09-03T08:10:00+09:00
+- 全 26 件 / 完了 15 件 / 進行中 0 件 / 未着手 11 件
+- 現在のタスク: T-013（次に着手。Hono API）
+- 最終更新: 2026-09-03T08:30:00+09:00
 
 ## フェーズ進捗
 
@@ -32,7 +32,7 @@
 | T-009 | Claude JSONL のサマリ解析（parser） | T-007, T-008 | done | 1 | #17 |
 | T-010 | Claude 稼働メタとプロセス列挙 | T-004, T-006 | done | 2 | #16 |
 | T-011 | Codex rollout の探索と解析 | T-007, T-006 | done | 2 | #15 |
-| T-012 | セッション索引とアカウント合成 | T-009, T-010, T-011 | todo | 0 | - |
+| T-012 | セッション索引とアカウント合成 | T-009, T-010, T-011 | done | 2 | #18 |
 | T-013 | Hono API: sessions / accounts / health | T-012 | todo | 0 | - |
 | T-014 | セッション詳細 API とメッセージ抽出 | T-003, T-013 | todo | 0 | - |
 | T-015 | ファイル監視・ポーリング・SSE・refresh | T-013 | todo | 0 | - |
@@ -191,14 +191,15 @@
 ### T-012 セッション索引とアカウント合成
 - **目的**: sources の結果を `SessionSummary[]` / `Account[]` に組み立てる
 - **受け入れ条件**:
-  - [ ] `SessionIndex` クラスが `rebuild()`（全走査）と `refreshFiles(paths)`（差分）と `getAll()`, `get(key)`, `getAccounts()` を持つ
-  - [ ] `SessionSummary` の全フィールドを埋める（`branch: "HEAD" → null`、`title` 無し → `"(無題)"`、`lastMessage` はマスク済み 200 文字）
-  - [ ] `accountKey` を ADR-0004 の規則で合成し、`config.accounts` の表示名で `Account.label` を上書きする。既定名は `Claude Desktop N`（N は出現順）、`Claude CLI`、`Codex`
-  - [ ] `Account.running`, `runningCount`, `sessionCount`, `startedAt` を集計する
-  - [ ] 状態判定は `shared/state.ts` を使う。プロセス情報が無い場合は `stateReason: "no-process-info"`
-  - [ ] 同じ sessionId が複数 root に出た場合は mtime の新しい方を採用
+  - [x] `SessionIndex` クラスが `rebuild()`（全走査）と `refreshFiles(paths)`（差分）と `getAll()`, `get(key)`, `getAccounts()` を持つ
+  - [x] `SessionSummary` の全フィールドを埋める（`branch: "HEAD" → null`、`title` 無し → `"(無題)"`、`lastMessage` はマスク済み 200 文字）
+  - [x] `accountKey` を ADR-0004 の規則で合成し、`config.accounts` の表示名で `Account.label` を上書きする。既定名は `Claude Desktop N`（N は出現順）、`Claude CLI`、`Codex`
+  - [x] `Account.running`, `runningCount`, `sessionCount`, `startedAt` を集計する
+  - [x] 状態判定は `shared/state.ts` を使う。プロセス情報が無い場合は `stateReason: "no-process-info"`
+  - [x] 同じ sessionId が複数 root に出た場合は mtime の新しい方を採用
 - **参照**: ARCHITECTURE.md §3, §4.1 / ADR-0004
 - **触ってよい範囲**: `src/server/store/index.ts`
+- **T-012 レビューからの引き継ぎ（T-013 / T-014 / T-015 / Phase 4）**: `getAll()` は配列のみコピーで `SessionSummary` は索引と共有参照なので routes で加工しない。`POST /api/refresh` の連打では `listProcesses` の 2 秒キャッシュにより最大 2 秒古いプロセス一覧を使う（ADR-0003 の範囲内）。読み取り失敗セッションの `accountKey` は `claude:cli` 固定（Desktop 起動でも）。`refreshFiles` のパス照合は総当たり（数百件で遅ければ正規化パス → key の Map にする）。「両方を試す」root では `sessions/` 配下がすべて Claude 稼働メタ扱いになり、新規 Codex rollout が rebuild にフォールバックしない（既定 roots では起きない）。警告の除去が文言マッチなので sources の警告に `code` を持たせる案は Phase 4 で検討。`index.ts` の `computeAccounts` / `mapWithConcurrency` は `store/accounts.ts` / `store/concurrency.ts` へ分割候補。`truncateEnd` は UTF-16 単位で切る（`format.ts` の `truncateStart` と同じ注意）。`refreshFiles` は複数 root に同じ id がある場合や locator の一時的な readdir 失敗でも該当キーを削除するが、次の変更イベントで未知パス → rebuild により自己修復する。T-015 の watcher でこの復帰経路が通ることを 1 度確認する
 
 ### T-013 Hono API: sessions / accounts / health
 - **目的**: クライアントが使う読み取り API
