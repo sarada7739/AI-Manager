@@ -268,4 +268,125 @@ describe("createLogger", () => {
     expect(consoleWarnSpy).not.toHaveBeenCalled();
     expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
+
+  // T-013 引き継ぎ分: Date / Error / Map / 予約キー / 循環参照 / 深さ上限 / ダッシュ符号化 homeDir のマスク
+
+  it("field 値が Date の場合、ISO 文字列に変換されてから出力される", () => {
+    const { lines, sink } = makeSink();
+    const logger = createLogger({ roots: [ROOT_CLAUDE], homeDir: HOME_DIR, sink });
+    const someDate = new Date("2026-01-01T00:00:00.000Z");
+
+    logger.info("日付を含む", { someDate });
+
+    const parsed = JSON.parse(lines[0] ?? "");
+    expect(parsed.someDate).toBe("2026-01-01T00:00:00.000Z");
+  });
+
+  it("field 値が Error の場合、message がマスクされた文字列として出力される", () => {
+    const { lines, sink } = makeSink();
+    const logger = createLogger({ roots: [ROOT_CLAUDE], homeDir: HOME_DIR, sink });
+    const error = new Error(`失敗: ${ROOT_CLAUDE}\\a.jsonl`);
+
+    logger.error("読み込みエラー", { error });
+
+    const parsed = JSON.parse(lines[0] ?? "");
+    expect(parsed.error).toBe("失敗: ~\\.claude\\a.jsonl");
+  });
+
+  it("field 値が Map の場合、String(value) が出力される（マスクも適用される）", () => {
+    const { lines, sink } = makeSink();
+    const logger = createLogger({ roots: [ROOT_CLAUDE], homeDir: HOME_DIR, sink });
+    const map = new Map([["a", 1]]);
+
+    logger.info("Map を含む", { map });
+
+    const parsed = JSON.parse(lines[0] ?? "");
+    expect(parsed.map).toBe(String(map));
+  });
+
+  it("field 値が Set の場合、String(value) が出力される", () => {
+    const { lines, sink } = makeSink();
+    const logger = createLogger({ roots: [ROOT_CLAUDE], homeDir: HOME_DIR, sink });
+    const set = new Set([1, 2, 3]);
+
+    logger.info("Set を含む", { set });
+
+    const parsed = JSON.parse(lines[0] ?? "");
+    expect(parsed.set).toBe(String(set));
+  });
+
+  it("fields に予約キー（level / at / message）を渡しても出力側の値が上書きされない", () => {
+    const { lines, sink } = makeSink();
+    const logger = createLogger({ roots: [ROOT_CLAUDE], homeDir: HOME_DIR, sink });
+
+    logger.info("実際のメッセージ", {
+      level: "not-a-real-level",
+      at: "not-a-real-timestamp",
+      message: "not-the-real-message",
+    });
+
+    const parsed = JSON.parse(lines[0] ?? "");
+    expect(parsed.level).toBe("info");
+    expect(parsed.message).toBe("実際のメッセージ");
+    expect(parsed.at).not.toBe("not-a-real-timestamp");
+    expect(new Date(parsed.at).toISOString()).toBe(parsed.at);
+  });
+
+  it('循環参照を含む field は例外にならず "[circular]" になる', () => {
+    const { lines, sink } = makeSink();
+    const logger = createLogger({ roots: [ROOT_CLAUDE], homeDir: HOME_DIR, sink });
+    const circular: Record<string, unknown> = { name: "自己参照" };
+    circular.self = circular;
+
+    expect(() => logger.info("循環構造", { circular })).not.toThrow();
+
+    const parsed = JSON.parse(lines[0] ?? "");
+    expect(parsed.circular.self).toBe("[circular]");
+  });
+
+  it('深さ上限（32）を超えるネストは "[depth]" になる', () => {
+    const { lines, sink } = makeSink();
+    const logger = createLogger({ roots: [ROOT_CLAUDE], homeDir: HOME_DIR, sink });
+    let nested: unknown = "leaf";
+    for (let i = 0; i < 40; i += 1) {
+      nested = { child: nested };
+    }
+
+    expect(() => logger.info("深いネスト", { root: nested })).not.toThrow();
+
+    const parsed = JSON.parse(lines[0] ?? "");
+    expect(JSON.stringify(parsed.root)).toContain("[depth]");
+  });
+
+  it("homeDir のダッシュ符号化形（`C--Users-someone`）を含む message がマスクされる", () => {
+    const { lines, sink } = makeSink();
+    const logger = createLogger({ roots: [ROOT_CLAUDE], homeDir: HOME_DIR, sink });
+
+    logger.error("失敗: C--Users-someone-project の読み込みに失敗しました");
+
+    const parsed = JSON.parse(lines[0] ?? "");
+    expect(parsed.message).toBe("失敗: ~-project の読み込みに失敗しました");
+  });
+
+  it("homeDir のダッシュ符号化形を含む fields もマスクされる", () => {
+    const { lines, sink } = makeSink();
+    const logger = createLogger({ roots: [ROOT_CLAUDE], homeDir: HOME_DIR, sink });
+
+    logger.info("読み込み", { dirName: "C--Users-someone-project" });
+
+    const parsed = JSON.parse(lines[0] ?? "");
+    expect(parsed.dirName).toBe("~-project");
+  });
+
+  it("sink が呼び出しのたびに throw しても、createLogger の呼び出し側に例外が伝播しない", () => {
+    const logger = createLogger({
+      roots: [ROOT_CLAUDE],
+      homeDir: HOME_DIR,
+      sink: () => {
+        throw new Error("sink が常に失敗する");
+      },
+    });
+
+    expect(() => logger.info("test", { path: `${ROOT_CLAUDE}\\a.jsonl` })).not.toThrow();
+  });
 });
