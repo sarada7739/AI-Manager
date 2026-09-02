@@ -1,9 +1,9 @@
 # TASKS.md — タスク台帳（進捗の唯一の真実）
 
 ## 進捗サマリ
-- 全 26 件 / 完了 11 件 / 進行中 3 件 / 未着手 12 件
-- 現在のタスク: T-009（実装中）。T-010 / T-011 はレビュー中（並列）
-- 最終更新: 2026-09-03T07:40:00+09:00
+- 全 26 件 / 完了 12 件 / 進行中 2 件 / 未着手 12 件
+- 現在のタスク: T-009（テスト中）。T-010 はレビュー Round 2 中
+- 最終更新: 2026-09-03T07:50:00+09:00
 
 ## フェーズ進捗
 
@@ -31,7 +31,7 @@
 | T-008 | Claude セッションの探索（locator） | T-006 | done | 1 | #13 |
 | T-009 | Claude JSONL のサマリ解析（parser） | T-007, T-008 | in_progress | 1 | - |
 | T-010 | Claude 稼働メタとプロセス列挙 | T-004, T-006 | review | 1 | - |
-| T-011 | Codex rollout の探索と解析 | T-007, T-006 | review | 1 | - |
+| T-011 | Codex rollout の探索と解析 | T-007, T-006 | done | 2 | #15 |
 | T-012 | セッション索引とアカウント合成 | T-009, T-010, T-011 | todo | 0 | - |
 | T-013 | Hono API: sessions / accounts / health | T-012 | todo | 0 | - |
 | T-014 | セッション詳細 API とメッセージ抽出 | T-003, T-013 | todo | 0 | - |
@@ -177,13 +177,14 @@
 ### T-011 Codex rollout の探索と解析
 - **目的**: Codex を同じ Session 抽象に載せる
 - **受け入れ条件**:
-  - [ ] `locateCodexSessions(root)` が `sessions/YYYY/MM/DD/rollout-*.jsonl` を列挙し `{ id(threadId), jsonlPath, sizeBytes, mtime }` を返す。ファイル名から threadId を取れないものは無視
-  - [ ] `parseCodexSummary(headLines, tailLines)` が `session_meta` から `cwd, originator, cli_version, model_provider, git.branch`、`turn_context` から `model`、`event_msg.user_message` から title、`event_msg.task_complete.last_agent_message` または末尾 `response_item` から lastMessage を返す
-  - [ ] 未知の `type` / `payload.type` は無視する
-  - [ ] `sessions/` が無ければ空配列 + 警告
-  - [ ] `thread-writer-locks` は読まない
+  - [x] `locateCodexSessions(root)` が `sessions/YYYY/MM/DD/rollout-*.jsonl` を列挙し `{ id(threadId), jsonlPath, sizeBytes, mtime }` を返す。ファイル名から threadId を取れないものは無視
+  - [x] `parseCodexSummary(headLines, tailLines)` が `session_meta` から `cwd, originator, cli_version, model_provider, git.branch`、`turn_context` から `model`、`event_msg.user_message` から title、`event_msg.task_complete.last_agent_message` または末尾 `response_item` から lastMessage を返す
+  - [x] 未知の `type` / `payload.type` は無視する
+  - [x] `sessions/` が無ければ空配列 + 警告
+  - [x] `thread-writer-locks` は読まない
 - **参照**: RESEARCH.md §3 / ADR-0005
 - **触ってよい範囲**: `src/server/sources/codex/locator.ts`, `src/server/sources/codex/parser.ts`
+- **T-011 レビューからの引き継ぎ（T-012）**: `parseCodexSummary` / `parseClaudeSummary` の `parseFailures` は head + tail の合計で、小ファイル（head と tail が重なる）では最大 2 倍になる。索引側で head / tail の範囲が重なる場合は tail だけを渡すか、`min(parseFailures, 実行数)` に丸めてから `parseWarnings` に出す。`response_item.content` の `type` 無し要素は本文として採用している（実データが得られたら見直す）。集約警告の文言「セッションディレクトリのうち」は stat 失敗（ファイル単位）も含むので次に触るとき「セッションログのうち」に直す
 
 ### T-012 セッション索引とアカウント合成
 - **目的**: sources の結果を `SessionSummary[]` / `Account[]` に組み立てる
