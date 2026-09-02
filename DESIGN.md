@@ -324,11 +324,16 @@
   --font-ui: "Segoe UI Variable Text", "Segoe UI", "Yu Gothic UI", system-ui, sans-serif;
   --font-mono: "Cascadia Mono", Consolas, "Courier New", monospace;
 
-  --text-xs: 11px; --leading-xs: 1.3;
-  --text-sm: 12px; --leading-sm: 1.4;
-  --text-md: 13px; --leading-md: 1.45;
-  --text-lg: 15px; --leading-lg: 1.4;
-  --text-xl: 20px; --leading-xl: 1.2;
+  --text-xs: 11px;
+  --leading-xs: 1.3;
+  --text-sm: 12px;
+  --leading-sm: 1.4;
+  --text-md: 13px;
+  --leading-md: 1.45;
+  --text-lg: 15px;
+  --leading-lg: 1.4;
+  --text-xl: 20px;
+  --leading-xl: 1.2;
 
   --weight-regular: 400;
   --weight-medium: 500;
