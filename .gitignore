@@ -1,0 +1,39 @@
+# ---- 依存・ビルド成果物 ----
+node_modules/
+dist/
+dist-ssr/
+.vite/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+
+# ---- ログ・一時ファイル ----
+*.log
+npm-debug.log*
+pnpm-debug.log*
+.DS_Store
+Thumbs.db
+
+# ---- エディタ ----
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# ---- 環境変数・秘密情報 ----
+.env
+.env.*
+!.env.example
+
+# ---- 実ログの取り込み先（harness.md §2.1 / §9.1）----
+# public リポジトリのため、実際のセッションログ・実パス・個人情報は絶対にコミットしない。
+# ローカル調査用にログをコピーする場合は必ずこの配下に置く。
+local-data/
+scratch/
+*.session.jsonl
+*.rollout.jsonl
+
+# ---- Claude Code / Codex のローカル状態 ----
+.claude/settings.local.json
+.claude/*.local.*
+.codex/

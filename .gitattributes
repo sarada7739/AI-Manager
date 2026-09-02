@@ -1,0 +1,11 @@
+# リポジトリ内の改行コードは LF に統一する（harness.md §2.3）
+* text=auto eol=lf
+
+# バイナリは変換しない
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
