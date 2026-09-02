@@ -1,9 +1,9 @@
 # TASKS.md — タスク台帳（進捗の唯一の真実）
 
 ## 進捗サマリ
-- 全 26 件 / 完了 9 件 / 進行中 0 件 / 未着手 17 件
-- 現在のタスク: T-008（次に着手。T-009 / T-010 / T-011 / T-017 は並列可）
-- 最終更新: 2026-09-03T03:20:00+09:00
+- 全 26 件 / 完了 10 件 / 進行中 3 件 / 未着手 13 件
+- 現在のタスク: T-009（次に着手）。T-010 / T-011 / T-017 はレビュー中（並列）
+- 最終更新: 2026-09-03T07:30:00+09:00
 
 ## フェーズ進捗
 
@@ -28,16 +28,16 @@
 | T-005 | 相対時刻とパス短縮の整形関数 | T-002 | done | 2 | #8 |
 | T-006 | サーバ設定の読込と安全パス検証 | T-002 | done | 3 | #12 |
 | T-007 | ファイル先頭 / 末尾の部分読み取り | T-002 | done | 2 | #10 |
-| T-008 | Claude セッションの探索（locator） | T-006 | todo | 0 | - |
+| T-008 | Claude セッションの探索（locator） | T-006 | done | 1 | #13 |
 | T-009 | Claude JSONL のサマリ解析（parser） | T-007, T-008 | todo | 0 | - |
-| T-010 | Claude 稼働メタとプロセス列挙 | T-004, T-006 | todo | 0 | - |
-| T-011 | Codex rollout の探索と解析 | T-007, T-006 | todo | 0 | - |
+| T-010 | Claude 稼働メタとプロセス列挙 | T-004, T-006 | review | 1 | - |
+| T-011 | Codex rollout の探索と解析 | T-007, T-006 | review | 1 | - |
 | T-012 | セッション索引とアカウント合成 | T-009, T-010, T-011 | todo | 0 | - |
 | T-013 | Hono API: sessions / accounts / health | T-012 | todo | 0 | - |
 | T-014 | セッション詳細 API とメッセージ抽出 | T-003, T-013 | todo | 0 | - |
 | T-015 | ファイル監視・ポーリング・SSE・refresh | T-013 | todo | 0 | - |
 | T-016 | デザイントークンとグローバルスタイル | T-001 | done | 1 | #9 |
-| T-017 | 汎用 UI コンポーネント | T-016 | todo | 0 | - |
+| T-017 | 汎用 UI コンポーネント | T-016 | review | 1 | - |
 | T-018 | グルーピング・絞り込み・並べ替えの純粋関数 | T-002, T-005 | done | 3 | #11 |
 | T-019 | クライアント基盤（API クライアント / ストア / URL 同期） | T-013, T-018 | todo | 0 | - |
 | T-020 | App シェルとヘッダ帯 | T-017, T-019 | todo | 0 | - |
@@ -140,13 +140,14 @@
 ### T-008 Claude セッションの探索（locator）
 - **目的**: `projects/**/*.jsonl` と付随ファイルを列挙する
 - **受け入れ条件**:
-  - [ ] `locateClaudeSessions(root)` が `projects/<dir>/<sessionId>.jsonl` を列挙し、各件の `{ id, jsonlPath, projectDir, sizeBytes, mtime, hasCustomTitleFile, released, subagentCount }` を返す
-  - [ ] `<sessionId>/custom-title.json`, `<sessionId>.desktop-released.json`, `<sessionId>/subagents/agent-*.jsonl` の有無・件数を stat だけで取る（本文は読まない）
-  - [ ] `sessionId` が UUID 形式でないファイルは無視する。`memory/`, `tool-results/` を辿らない
-  - [ ] `projects/` が無ければ空配列 + 警告（例外を投げない）
-  - [ ] 除外ファイル（T-006）を開かない
+  - [x] `locateClaudeSessions(root)` が `projects/<dir>/<sessionId>.jsonl` を列挙し、各件の `{ id, jsonlPath, projectDir, sizeBytes, mtime, hasCustomTitleFile, released, subagentCount }` を返す
+  - [x] `<sessionId>/custom-title.json`, `<sessionId>.desktop-released.json`, `<sessionId>/subagents/agent-*.jsonl` の有無・件数を stat だけで取る（本文は読まない）
+  - [x] `sessionId` が UUID 形式でないファイルは無視する。`memory/`, `tool-results/` を辿らない
+  - [x] `projects/` が無ければ空配列 + 警告（例外を投げない）
+  - [x] 除外ファイル（T-006）を開かない
 - **参照**: RESEARCH.md §2.1 / ARCHITECTURE.md §4.1
 - **触ってよい範囲**: `src/server/sources/claude/locator.ts`
+- **T-008 レビューからの引き継ぎ（T-009 / T-012）**: `CLAUDE_SESSION_ID_PATTERN` を locator から再利用する。`ClaudeSessionFile.mtime` は epoch ms、`projectDir` は絶対パス（ログに出さない）。警告は固定文言 + 件数のみ。`<dir>` の readdir 失敗分岐と `isUnderRoot` false 分岐は未検証（防御として残置）。全走査の I/O は逐次なので、数百件規模で遅ければ `<dir>` 単位の `Promise.all` を検討（T-012）
 
 ### T-009 Claude JSONL のサマリ解析（parser）
 - **目的**: 先頭 / 末尾だけから `SessionSummary` の材料を作る
