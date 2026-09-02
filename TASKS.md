@@ -1,9 +1,9 @@
 # TASKS.md — タスク台帳（進捗の唯一の真実）
 
 ## 進捗サマリ
-- 全 26 件 / 完了 13 件 / 進行中 1 件 / 未着手 12 件
-- 現在のタスク: T-009（レビュー中）。次は T-012
-- 最終更新: 2026-09-03T08:00:00+09:00
+- 全 26 件 / 完了 14 件 / 進行中 0 件 / 未着手 12 件
+- 現在のタスク: T-012（次に着手。sources が揃ったので索引を組む）
+- 最終更新: 2026-09-03T08:10:00+09:00
 
 ## フェーズ進捗
 
@@ -29,7 +29,7 @@
 | T-006 | サーバ設定の読込と安全パス検証 | T-002 | done | 3 | #12 |
 | T-007 | ファイル先頭 / 末尾の部分読み取り | T-002 | done | 2 | #10 |
 | T-008 | Claude セッションの探索（locator） | T-006 | done | 1 | #13 |
-| T-009 | Claude JSONL のサマリ解析（parser） | T-007, T-008 | in_progress | 1 | - |
+| T-009 | Claude JSONL のサマリ解析（parser） | T-007, T-008 | done | 1 | #17 |
 | T-010 | Claude 稼働メタとプロセス列挙 | T-004, T-006 | done | 2 | #16 |
 | T-011 | Codex rollout の探索と解析 | T-007, T-006 | done | 2 | #15 |
 | T-012 | セッション索引とアカウント合成 | T-009, T-010, T-011 | todo | 0 | - |
@@ -152,16 +152,17 @@
 ### T-009 Claude JSONL のサマリ解析（parser）
 - **目的**: 先頭 / 末尾だけから `SessionSummary` の材料を作る
 - **受け入れ条件**:
-  - [ ] `parseClaudeSummary(headLines, tailLines)` が `{ cwd, version, entrypoint, gitBranch, firstAt, lastAt, model, title, lastMessage, lastRole, ownerAccountUuid }` を返す
-  - [ ] タイトルは custom-title → ai-title → 最初の user の本文先頭 1 行 → `null` の順（custom-title.json の値は呼び出し側が優先して上書きする）
-  - [ ] `user` の `message.content` が文字列でも配列（`text` / `image` ブロック）でも本文を取り出せる。画像しか無ければ「(画像)」
-  - [ ] `assistant` の `content` から `text` ブロックだけを取り、`tool_use` は無視。`<synthetic>` モデルは無視
-  - [ ] JSON パース失敗行はスキップして件数を返す
-  - [ ] `isSidechain: true` の行は無視する
-  - [ ] `bridge-session` があれば `ownerAccountUuid` を取る
-  - [ ] 先頭・末尾が空でも例外を投げず、すべて `null` のサマリを返す
+  - [x] `parseClaudeSummary(headLines, tailLines)` が `{ cwd, version, entrypoint, gitBranch, firstAt, lastAt, model, title, lastMessage, lastRole, ownerAccountUuid }` を返す
+  - [x] タイトルは custom-title → ai-title → 最初の user の本文先頭 1 行 → `null` の順（custom-title.json の値は呼び出し側が優先して上書きする）
+  - [x] `user` の `message.content` が文字列でも配列（`text` / `image` ブロック）でも本文を取り出せる。画像しか無ければ「(画像)」
+  - [x] `assistant` の `content` から `text` ブロックだけを取り、`tool_use` は無視。`<synthetic>` モデルは無視
+  - [x] JSON パース失敗行はスキップして件数を返す
+  - [x] `isSidechain: true` の行は無視する
+  - [x] `bridge-session` があれば `ownerAccountUuid` を取る
+  - [x] 先頭・末尾が空でも例外を投げず、すべて `null` のサマリを返す
 - **参照**: RESEARCH.md §2.3, §2.5 / ARCHITECTURE.md §4.1
 - **触ってよい範囲**: `src/server/sources/claude/parser.ts`
+- **T-009 レビューからの引き継ぎ（T-012）**: parser は生の断片を返す。索引側で (a) title 候補が `<command-name>` / `<local-command-stdout>` / `<system-reminder>` / `<bash-input>` など `<` で始まる既知のシステムタグなら除外し、候補が尽きたら「(無題)」、(b) lastMessage は tail → `last-prompt` → head の順で決まるので、head 由来（古い本文）の場合があることを踏まえて表示する（当面はそのまま「最終メッセージ」として出してよい）、(c) `parseFailures` は head + tail の合計なので小ファイルでは丸める、(d) `CLAUDE_SESSION_ID_PATTERN` を `shared` から参照したくなったら定数を `src/shared/` へ移す（locator は node:fs を import するため）
 
 ### T-010 Claude 稼働メタとプロセス列挙
 - **目的**: `sessions/<pid>.json` とプロセス一覧から running を判定する材料を集める
