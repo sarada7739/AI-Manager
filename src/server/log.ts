@@ -36,6 +36,9 @@ interface MaskRule {
   replacement: string;
 }
 
+/** 再帰的なマスク処理の深さ上限。循環に近い深い構造でスタックを消費し続けないための保険。 */
+const MAX_MASK_DEPTH = 32;
+
 /** 正規表現の特殊文字をエスケープする。 */
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -54,6 +57,22 @@ function buildMaskPattern(rawPrefix: string): RegExp | undefined {
   }
   const body = segments.map((segment) => escapeRegExp(segment)).join("[\\\\/]");
   return new RegExp(`${body}(?=[\\\\/]|$)`, "gi");
+}
+
+/**
+ * `homeDir` をダッシュ符号化した文字列（`projects/<dir>` のディレクトリ名で使われる形。
+ * 例: `C:\Users\name` → `C--Users-name`）に一致する正規表現を作る。
+ * 英数字以外の文字をすべて `-` に置換したものを対象にし、末尾が `-` / `\` / `/` または
+ * 文字列終端の位置でのみ成立する（`buildMaskPattern` と同じ「単語境界」の考え方。
+ * ダッシュ符号化された文字列内では区切りが `-` になるため、区切り候補に `-` を加える）。
+ */
+function buildDashMaskPattern(rawHomeDir: string): RegExp | undefined {
+  const trimmed = rawHomeDir.replace(/[\\/]+$/, "");
+  const encoded = trimmed.replace(/[^A-Za-z0-9]/g, "-").replace(/-+$/, "");
+  if (encoded.length === 0) {
+    return undefined;
+  }
+  return new RegExp(`${escapeRegExp(encoded)}(?=[-\\\\/]|$)`, "gi");
 }
 
 /** パス文字列を `\` / `/` 区切りで小文字の segment 配列に正規化する。 */
@@ -92,6 +111,11 @@ function buildMaskRules(roots: readonly string[], homeDir: string): MaskRule[] {
     rules.push({ pattern: homePattern, replacement: "~" });
   }
 
+  const dashHomePattern = homeDir.length > 0 ? buildDashMaskPattern(homeDir) : undefined;
+  if (dashHomePattern !== undefined) {
+    rules.push({ pattern: dashHomePattern, replacement: "~" });
+  }
+
   const outsideRoots = roots
     .filter((root) => root.length > 0 && !isPathUnderHomeDir(root, homeDir))
     .sort((a, b) => b.length - a.length);
@@ -115,24 +139,71 @@ function maskValue(value: string, rules: readonly MaskRule[]): string {
   return result;
 }
 
+/** value が「素の」オブジェクト（オブジェクトリテラル相当）かどうかを判定する。 */
+function isPlainObject(value: object): boolean {
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
 /**
- * 値を再帰的にマスクする。文字列はマスクし、配列・オブジェクトは中身を再帰的にマスクし、
- * それ以外（数値・真偽値・null・undefined 等）はそのまま返す。
+ * 値を再帰的にマスクする。
+ * - 文字列: マスク規則を適用する
+ * - 配列・素のオブジェクト: 中身を再帰的にマスクする（`seen` で訪問中の祖先を追跡し、
+ *   自身を再度参照する循環構造は `"[circular]"` にする。`depth` が上限を超えたら `"[depth]"`）
+ * - `Date`: ISO 文字列にしてからマスクする
+ * - `Error`: `message` を文字列としてマスクする
+ * - `Map` / `Set` / クラスインスタンスなど、その他の非プレーンオブジェクト: `String(value)` をマスクする
+ * - それ以外（数値・真偽値・null・undefined 等）はそのまま返す
  */
-function maskDeep(value: unknown, rules: readonly MaskRule[]): unknown {
+function maskDeep(
+  value: unknown,
+  rules: readonly MaskRule[],
+  seen: WeakSet<object>,
+  depth: number,
+): unknown {
   if (typeof value === "string") {
     return maskValue(value, rules);
   }
+
   if (Array.isArray(value)) {
-    return value.map((item) => maskDeep(item, rules));
-  }
-  if (isRecord(value)) {
-    const masked: Record<string, unknown> = {};
-    for (const [key, item] of Object.entries(value)) {
-      masked[key] = maskDeep(item, rules);
+    if (depth >= MAX_MASK_DEPTH) {
+      return "[depth]";
     }
+    if (seen.has(value)) {
+      return "[circular]";
+    }
+    seen.add(value);
+    const masked = value.map((item) => maskDeep(item, rules, seen, depth + 1));
+    seen.delete(value);
     return masked;
   }
+
+  if (value !== null && typeof value === "object") {
+    if (isPlainObject(value) && isRecord(value)) {
+      if (depth >= MAX_MASK_DEPTH) {
+        return "[depth]";
+      }
+      if (seen.has(value)) {
+        return "[circular]";
+      }
+      seen.add(value);
+      const masked: Record<string, unknown> = {};
+      for (const [key, item] of Object.entries(value)) {
+        masked[key] = maskDeep(item, rules, seen, depth + 1);
+      }
+      seen.delete(value);
+      return masked;
+    }
+    if (value instanceof Date) {
+      return maskValue(value.toISOString(), rules);
+    }
+    if (value instanceof Error) {
+      return maskValue(value.message, rules);
+    }
+    // Map / Set / クラスインスタンスなど、その他の非プレーンオブジェクト。
+    return maskValue(String(value), rules);
+  }
+
   return value;
 }
 
@@ -143,7 +214,7 @@ function maskFields(
 ): Record<string, unknown> {
   const masked: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(fields)) {
-    masked[key] = maskDeep(value, rules);
+    masked[key] = maskDeep(value, rules, new WeakSet<object>(), 0);
   }
   return masked;
 }
@@ -158,13 +229,25 @@ export function createLogger(opts: CreateLoggerOptions): Logger {
   const rules = buildMaskRules(opts.roots, opts.homeDir);
 
   function write(level: LogLevel, message: string, fields?: Record<string, unknown>): void {
-    const record: Record<string, unknown> = {
-      level,
-      at: new Date().toISOString(),
-      message: maskValue(message, rules),
-      ...(fields ? maskFields(fields, rules) : {}),
-    };
-    sink(`${JSON.stringify(record)}\n`);
+    try {
+      // 予約キー（level / at / message）は fields より後に置き、fields 側に同名キーが
+      // あっても上書きされないようにする。
+      const record: Record<string, unknown> = {
+        ...(fields ? maskFields(fields, rules) : {}),
+        level,
+        at: new Date().toISOString(),
+        message: maskValue(message, rules),
+      };
+      sink(`${JSON.stringify(record)}\n`);
+    } catch {
+      // マスク処理・JSON化のいずれで失敗しても、ログ出力自体を止めないよう固定の 1 行を出す。
+      // sink 自体が失敗し続ける場合でも呼び出し側に例外を伝播させない（ログは業務処理を止めない）。
+      try {
+        sink('{"level":"error","message":"ログの整形に失敗しました"}\n');
+      } catch {
+        // 出力先が壊れている。これ以上できることは無い
+      }
+    }
   }
 
   return {
