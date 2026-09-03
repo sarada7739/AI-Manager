@@ -1,9 +1,9 @@
 # TASKS.md — タスク台帳（進捗の唯一の真実）
 
 ## 進捗サマリ
-- 全 29 件 / 完了 29 件 / 進行中 0 件 / 未着手 0 件
-- 現在のタスク: **すべて完了**（第 1 段階 read-only + 実機確認の修正 T-027 / T-028 + 配色変更 T-029。第 2 段階 F-7 は ADR 起票と人間の承認が前提）
-- 最終更新: 2026-09-03T22:00:00+09:00
+- 全 33 件 / 完了 29 件 / 進行中 0 件 / 未着手 0 件 / 保留 4 件
+- 現在のタスク: **第 2 段階（F-7 指示送信）は ADR-0009 の承認待ち**。承認後に T-030（検証スパイク）から着手する
+- 最終更新: 2026-09-04T00:30:00+09:00
 
 ## フェーズ進捗
 
@@ -14,6 +14,7 @@
 | 2 | タスク分解 | done | #3 |
 | 3 | タスク実行ループ | done | #4〜#29 |
 | 4 | 最終レビュー | done | #30 |
+| 5 | 第 2 段階（F-7 指示送信） | blocked（ADR-0009 承認待ち） | - |
 
 ## タスク一覧
 
@@ -50,6 +51,10 @@
 | T-027 | 稼働メタの procStart が文字列でも読めるようにする | T-010 | done | 2 | #31 |
 | T-028 | 詳細パネルで直近メッセージが 0 件のときの案内表示 | T-025 | done | 2 | #31 |
 | T-029 | 配色をインディゴ基調に変更（光彩・グラデーション・見出し書体） | T-016 | done | 3 | #32 |
+| T-030 | F-7 検証スパイク（パイプの認証・メッセージ形式、codex queue の到達性） | T-010 | blocked | 0 | - |
+| T-031 | 送信 API とパイプ / codex queue アダプタ（サーバ） | T-030 | blocked | 0 | - |
+| T-032 | ComposeBox の有効化と送信前確認ダイアログ（クライアント） | T-031 | blocked | 0 | - |
+| T-033 | 送信の E2E と README / ARCHITECTURE の更新 | T-032 | blocked | 0 | - |
 
 依存グラフは DAG（循環なし）。実行順は ID 順で依存を満たす。
 
@@ -410,3 +415,47 @@
   - [x] レイアウト・余白・角丸・状態の形とラベル・キーボード操作は変えない。既存テスト（1500 件超）と E2E が pass
 - **参照**: ADR-0008 / DESIGN.md §1, §2, §3, §4.3, §6, §9
 - **触ってよい範囲**: `src/client/styles/tokens.css`, `src/client/styles/global.css`, `src/client/**/*.module.css`（レイアウトに関わる宣言は変えない）、`tests/unit/client/**`（tester）。DESIGN.md / ADR はメインが先に更新する
+
+### T-030 F-7 検証スパイク（パイプの認証・メッセージ形式、codex queue の到達性）
+- **目的**: ADR-0009 §「決定」2 の未確認事項を、利用者が起動した検証用セッションだけを相手に確かめる。本実装のコードは書かない
+- **受け入れ条件**:
+  - [ ] `sessions/<pid>.<sha256>.key` の内容が認証行 `{"type":"auth","token":…}` の `token` として通ることを確認する（値はどこにも記録しない）
+  - [ ] 認証行の後に送るメッセージ行の JSON 形式を特定し、`docs/RESEARCH.md` §6 に **形式だけ**（値は合成）を追記する
+  - [ ] 受信側が auto / bypass のとき保留ダイアログが出ること、prompting のとき配信されることを確認する
+  - [ ] `codex queue --thread --message` が対話 TUI セッションに届くか、daemon が要るかを確認し、RESEARCH.md §6 に追記する
+  - [ ] 検証に使ったスクリプトは `local-data/`（gitignore 済み）に置き、リポジトリに入れない
+- **参照**: ADR-0009 / RESEARCH.md §6
+- **触ってよい範囲**: `docs/RESEARCH.md`, `docs/adr/0009-f7-send-instruction.md`（状態の更新）
+- **停止条件**: 送信先は利用者が起動した検証用セッションのみ。作業中のセッションには送らない。形式が特定できなければ止まって報告する
+
+### T-031 送信 API とパイプ / codex queue アダプタ（サーバ）
+- **目的**: `POST /api/sessions/:tool/:id/message` を追加し、Claude は名前付きパイプ、Codex は `codex queue` で送る
+- **受け入れ条件**:
+  - [ ] 宛先は索引の `running` セッションだけ。`sessionId` / `pid` / `messagingSocketPath` は同一の `sessions/<pid>.json` 由来で、パイプ名は `\.\pipe\LOCAL\cc-msg-` 前置きの厳密一致
+  - [ ] `.key` は送信時にだけ読み、メモリに保持せず、応答・ログ・エラー・テストに値を出さない。読む対象は `sessions/<pid>.<64 hex>.key` 形式のみ（`isExcludedFile` の例外を ARCHITECTURE.md §7 に明記）
+  - [ ] 本文 1〜4,000 文字、1 セッションあたり 10 秒に 1 件、同一本文の連投は 400 で拒否
+  - [ ] 失敗時の応答は「何が起きたか + 次にどうするか」（受信側が保留した場合はその旨）
+  - [ ] `codex queue` は `execFile` 固定引数・シェル非経由・10 秒タイムアウト
+  - [ ] ログは件数と成否のみ。本文・パイプ名・実パスを出さない
+- **参照**: ADR-0009 / ARCHITECTURE.md §5, §7 / CLAUDE.md §4
+- **触ってよい範囲**: `src/server/sources/claude/messaging.ts`（新規）, `src/server/sources/codex/queue.ts`（新規）, `src/server/routes/**`, `src/shared/**`（型のみ）, `ARCHITECTURE.md`, `tests/unit/server/**`, `tests/integration/**`
+
+### T-032 ComposeBox の有効化と送信前確認ダイアログ（クライアント）
+- **目的**: 指示入力欄を有効にし、読み取り専用トグル OFF + 確認ダイアログの 2 段階で送信する
+- **受け入れ条件**:
+  - [ ] 読み取り専用トグルが ON の間は送信できず、理由を隣に表示する（現状維持）
+  - [ ] 宛先はアカウント / セッションの選択で決まり、`running` 以外は選べない
+  - [ ] 確認ダイアログに宛先セッション名 / cwd / 本文の先頭 200 文字を出し、「送る」だけを `primary` にする。`Esc` で閉じる。フォーカスはダイアログに閉じ込める
+  - [ ] 送信結果（配信 / 保留 / 失敗）をヘッダ帯右端の `LiveStatus` と同じ場所に出す
+  - [ ] DESIGN.md に無い値を使わない。ダイアログは `--shadow-overlay` を使ってよい（§4.3）
+- **参照**: ADR-0009 / DESIGN.md §6.4, §6.6, §7 / ARCHITECTURE.md §4
+- **触ってよい範囲**: `src/client/features/compose/**`, `src/client/components/**`（Dialog の新設）, `src/client/api/**`, `src/client/store/**`, `tests/unit/client/**`
+
+### T-033 送信の E2E と README / ARCHITECTURE の更新
+- **目的**: 合成フィクスチャで「送信 API を叩かずに確認ダイアログまで進む」導線を E2E にし、README に送信の説明と注意を書く
+- **受け入れ条件**:
+  - [ ] E2E: トグル OFF → 宛先選択 → 本文入力 → ダイアログ表示 → `Esc` で閉じる（実際の送信はモックの API に対して 1 件）
+  - [ ] README: 送信の前提（Claude Code 2.1.234 以上、受信側の `crossSessionInbound`）、保留ダイアログの説明、使用量が発生する旨
+  - [ ] ARCHITECTURE.md §5 / §7 の更新（API と信頼境界）
+- **参照**: ADR-0009 / harness.md §10
+- **触ってよい範囲**: `e2e/**`, `README.md`, `ARCHITECTURE.md`
