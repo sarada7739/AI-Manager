@@ -1,9 +1,9 @@
 # TASKS.md — タスク台帳（進捗の唯一の真実）
 
 ## 進捗サマリ
-- 全 26 件 / 完了 18 件 / 進行中 4 件 / 未着手 4 件
-- 現在のタスク: T-015（第 2 段階 + Round 2）/ T-020（APPROVE、PR 待ち）/ T-021（レビュー中）/ T-022（Round 2）
-- 最終更新: 2026-09-03T12:35:00+09:00
+- 全 26 件 / 完了 19 件 / 進行中 3 件 / 未着手 4 件
+- 現在のタスク: T-015（第 2 段階 + Round 2）/ T-021（Round 2）/ T-022（Round 2）。次は T-023 / T-024
+- 最終更新: 2026-09-03T12:45:00+09:00
 
 ## フェーズ進捗
 
@@ -40,7 +40,7 @@
 | T-017 | 汎用 UI コンポーネント | T-016 | done | 1 | #14 |
 | T-018 | グルーピング・絞り込み・並べ替えの純粋関数 | T-002, T-005 | done | 3 | #11 |
 | T-019 | クライアント基盤（API クライアント / ストア / URL 同期） | T-013, T-018 | done | 2 | #21 |
-| T-020 | App シェルとヘッダ帯 | T-017, T-019 | review | 1 | - |
+| T-020 | App シェルとヘッダ帯 | T-017, T-019 | done | 1 | #22 |
 | T-021 | フィルタバーと読み取り専用トグル | T-020 | review | 1 | - |
 | T-022 | アカウント帯 | T-020 | review | 1 | - |
 | T-023 | ボード表示（列・カード・仮想スクロール） | T-021 | todo | 0 | - |
@@ -293,13 +293,14 @@
 ### T-020 App シェルとヘッダ帯
 - **目的**: ページ骨格、ボード / リスト切替、更新ボタン、件数表示
 - **受け入れ条件**:
-  - [ ] ヘッダ帯に「AI-Manager」、現在時刻（`HH:mm 現在`、1 分ごと更新）、「Claude N / Codex N 件」、`[ボード][リスト]` セグメント、`[更新]` ghost ボタン。`position: sticky`
-  - [ ] 起動時に `load()` を呼び、`Loading` → 本体、エラー時は `ErrorBanner`
-  - [ ] レイアウトは ヘッダ帯 → 指示入力（プレースホルダ領域）→ アカウント帯 → フィルタバー → 本体 の縦積み。各領域は feature コンポーネントを差し込むスロットにする（この時点では空のスロットでよい）
-  - [ ] `view` の切替で `BoardView` / `ListView` のプレースホルダが切り替わる
-  - [ ] タイトルバー `document.title` が「AI-Manager · N 稼働」になる
+  - [x] ヘッダ帯に「AI-Manager」、現在時刻（`HH:mm 現在`、1 分ごと更新）、「Claude N / Codex N 件」、`[ボード][リスト]` セグメント、`[更新]` ghost ボタン。`position: sticky`
+  - [x] 起動時に `load()` を呼び、`Loading` → 本体、エラー時は `ErrorBanner`
+  - [x] レイアウトは ヘッダ帯 → 指示入力（プレースホルダ領域）→ アカウント帯 → フィルタバー → 本体 の縦積み。各領域は feature コンポーネントを差し込むスロットにする（この時点では空のスロットでよい）
+  - [x] `view` の切替で `BoardView` / `ListView` のプレースホルダが切り替わる
+  - [x] タイトルバー `document.title` が「AI-Manager · N 稼働」になる
 - **参照**: DESIGN.md §5.1, §6.6 / ARCHITECTURE.md §2
 - **触ってよい範囲**: `src/client/app/**`, `src/client/features/refresh/RefreshButton.tsx`
+- **T-020 レビューからの引き継ぎ（T-023 / T-024 / T-025 / Phase 4）**: 表示切替セグメントは `Pill.filter`（`Button` が `aria-pressed` を持たないため）。DESIGN.md §6.6 の「ghost は『ボード / リスト』に使う」を §6.4 に寄せて修正する（Phase 4）。`Header` の `selectCounts` は `sessions` だけを deps にしている（表示値は `claude` / `codex` のみなので正しいが、`visible` を使うなら `filters` も購読）。`useSessionStore.getState()` を render 中に読む idiom は `useShallow` で必要フィールドだけ購読する形に統一する候補。絞り込みで 0 件のときの空状態（DESIGN §6.8「条件に合うセッションがありません」）は T-023 / T-024 側で出す。`features/refresh/index.ts` は T-025 で作る。`z-index` は `--z-*` トークンを DESIGN.md §9 に追加して一元化（T-025 でヘッダとフィルタバーの sticky が重なるとき）。`main` の `margin-top: --space-6` の持ち主を T-021 組み込み時に再確認。空スロットの `<section aria-label>` は中身が入るまでランドマークにしない選択もある。`App.test.tsx` の `vi.resetModules` は T-019 で fetch が呼び出し時参照になったので `vi.stubGlobal` だけに戻せる
 
 ### T-021 フィルタバーと読み取り専用トグル
 - **目的**: F-3 の軸切替、F-4 の絞り込み、F-8 のトグル
