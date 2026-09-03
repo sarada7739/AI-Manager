@@ -3,6 +3,7 @@ import type {
   AccountsResponse,
   ApiClient,
   ApiErrorBody,
+  MessageResponse,
   RefreshResponse,
   SessionsResponse,
 } from "../../../src/client/api/client";
@@ -16,6 +17,11 @@ import type { Account, SessionSummary } from "../../../src/shared/types";
 //   setFilter, setSort, select, setReadOnly を持つ。readOnly の既定は true」
 // 「fetch 失敗時は status.error に ApiError を入れ、既存データは保持する」
 // 実サーバ・実 fetch は使わない。フェイク api を注入する。合成データのみ。
+//
+// T-032 受け入れ条件（sendMessage、DESIGN.md §6.11 / ADR-0009）:
+// 「readOnly が true では fetch を呼ばない」「sending → sent（message『投函しました』）→
+//   setTimer の 10 秒後に idle」「失敗時 error で message に API の message と hint を含む」
+// 「key の形式不正（claude: 以外 / codex: では成立するが id 不正時など）では error」
 
 const NOW_ISO = "2026-01-01T00:00:00.000Z";
 
@@ -81,6 +87,7 @@ interface FakeApi {
   getSessions: ReturnType<typeof vi.fn>;
   getAccounts: ReturnType<typeof vi.fn>;
   postRefresh: ReturnType<typeof vi.fn>;
+  postMessage: ReturnType<typeof vi.fn>;
 }
 
 /** 既定で全成功するフェイク ApiClient を作る。各関数は個別に mockResolvedValueOnce 等で上書きできる。 */
@@ -98,13 +105,48 @@ function makeFakeApi(): FakeApi {
     async (): Promise<Result<RefreshResponse, ApiErrorBody>> =>
       ok({ ok: true, scanned: 0, durationMs: 0 }),
   );
+  const postMessage = vi.fn(
+    async (): Promise<Result<MessageResponse, ApiErrorBody>> =>
+      ok({ ok: true, sentAt: NOW_ISO, note: "" }),
+  );
   return {
-    api: { getSessions, getAccounts, getSession, getHealth, postRefresh } as unknown as ApiClient,
+    api: {
+      getSessions,
+      getAccounts,
+      getSession,
+      getHealth,
+      postRefresh,
+      postMessage,
+    } as unknown as ApiClient,
     getSessions,
     getAccounts,
     postRefresh,
+    postMessage,
   };
 }
+
+/** setTimer の呼び出しを記録し、手動で発火できるフェイクタイマーを作る。 */
+function makeFakeTimer(): {
+  setTimer: (callback: () => void, ms: number) => void;
+  calls: Array<{ callback: () => void; ms: number }>;
+  fireAll(): void;
+} {
+  const calls: Array<{ callback: () => void; ms: number }> = [];
+  return {
+    setTimer: (callback, ms) => {
+      calls.push({ callback, ms });
+    },
+    calls,
+    fireAll(): void {
+      for (const call of calls) {
+        call.callback();
+      }
+    },
+  };
+}
+
+const RUNNING_CLAUDE_KEY = "claude:00000000-0000-4000-8000-000000000001";
+const RUNNING_CLAUDE_ID = "00000000-0000-4000-8000-000000000001";
 
 describe("createSessionStore: 既定値", () => {
   it("readOnly の既定値は true である", () => {
@@ -357,5 +399,141 @@ describe("createSessionStore: setter 群", () => {
     store.getState().setFilter({ tool: "codex", query: "abc" });
     store.getState().resetFilters();
     expect(store.getState().filters).toEqual(DEFAULT_FILTERS);
+  });
+});
+
+describe("createSessionStore: sendMessage（T-032 / ADR-0009）", () => {
+  it("readOnly が true のとき fetch（postMessage）を呼ばない", async () => {
+    const { api, postMessage } = makeFakeApi();
+    const { setTimer } = makeFakeTimer();
+    const store = createSessionStore({ api, setTimer });
+    expect(store.getState().readOnly).toBe(true);
+
+    await store.getState().sendMessage(RUNNING_CLAUDE_KEY, "本文");
+
+    expect(postMessage).not.toHaveBeenCalled();
+    expect(store.getState().send.state).toBe("idle");
+  });
+
+  it("readOnly が false で成功時、sending を経て sent（message『投函しました』）になる", async () => {
+    const { api, postMessage } = makeFakeApi();
+    const deferred = (() => {
+      const box: { resolve?: (value: Result<MessageResponse, ApiErrorBody>) => void } = {};
+      const promise = new Promise<Result<MessageResponse, ApiErrorBody>>((res) => {
+        box.resolve = res;
+      });
+      return {
+        promise,
+        resolve: (value: Result<MessageResponse, ApiErrorBody>) => box.resolve?.(value),
+      };
+    })();
+    postMessage.mockReturnValueOnce(deferred.promise);
+    const { setTimer } = makeFakeTimer();
+    const store = createSessionStore({
+      api,
+      setTimer,
+      now: () => new Date("2026-03-01T00:00:00.000Z"),
+    });
+    store.getState().setReadOnly(false);
+
+    const sendPromise = store.getState().sendMessage(RUNNING_CLAUDE_KEY, "本文");
+    expect(store.getState().send.state).toBe("sending");
+
+    deferred.resolve(ok({ ok: true, sentAt: NOW_ISO, note: "" }));
+    await sendPromise;
+
+    expect(postMessage).toHaveBeenCalledWith("claude", RUNNING_CLAUDE_ID, "本文");
+    expect(store.getState().send.state).toBe("sent");
+    expect(store.getState().send.message).toBe("投函しました");
+    expect(store.getState().send.at).toBe(new Date("2026-03-01T00:00:00.000Z").getTime());
+  });
+
+  it("成功後、setTimer に登録されたコールバックを 10 秒後として発火すると send が idle に戻る", async () => {
+    const { api } = makeFakeApi();
+    const timer = makeFakeTimer();
+    const store = createSessionStore({ api, setTimer: timer.setTimer });
+    store.getState().setReadOnly(false);
+
+    await store.getState().sendMessage(RUNNING_CLAUDE_KEY, "本文");
+    expect(store.getState().send.state).toBe("sent");
+    expect(timer.calls).toHaveLength(1);
+    expect(timer.calls[0]?.ms).toBe(10_000);
+
+    timer.fireAll();
+
+    expect(store.getState().send).toEqual({ state: "idle", message: "", at: null });
+  });
+
+  it("失敗時は error になり、message に API の message と hint を含む", async () => {
+    const { api, postMessage } = makeFakeApi();
+    postMessage.mockResolvedValueOnce(
+      err({
+        code: "http_500",
+        message: "送信に失敗しました。",
+        hint: "時間をおいて再試行してください。",
+      }),
+    );
+    const timer = makeFakeTimer();
+    const store = createSessionStore({ api, setTimer: timer.setTimer });
+    store.getState().setReadOnly(false);
+
+    await store.getState().sendMessage(RUNNING_CLAUDE_KEY, "本文");
+
+    expect(store.getState().send.state).toBe("error");
+    expect(store.getState().send.message).toContain("送信に失敗しました。");
+    expect(store.getState().send.message).toContain("時間をおいて再試行してください。");
+  });
+
+  it("失敗時も setTimer 経由で 10 秒後に idle に戻る", async () => {
+    const { api, postMessage } = makeFakeApi();
+    postMessage.mockResolvedValueOnce(
+      err({ code: "http_500", message: "失敗しました。", hint: "再試行してください。" }),
+    );
+    const timer = makeFakeTimer();
+    const store = createSessionStore({ api, setTimer: timer.setTimer });
+    store.getState().setReadOnly(false);
+
+    await store.getState().sendMessage(RUNNING_CLAUDE_KEY, "本文");
+    expect(store.getState().send.state).toBe("error");
+
+    timer.fireAll();
+
+    expect(store.getState().send.state).toBe("idle");
+  });
+
+  it("key にコロンが無い（形式不正）のとき、送信前提の受け入れ条件どおり send.state が error になることを検証する", async () => {
+    const { api, postMessage } = makeFakeApi();
+    const timer = makeFakeTimer();
+    const store = createSessionStore({ api, setTimer: timer.setTimer });
+    store.getState().setReadOnly(false);
+
+    await store.getState().sendMessage("not-a-valid-key", "本文");
+
+    expect(postMessage).not.toHaveBeenCalled();
+    expect(store.getState().send.state).toBe("error");
+  });
+
+  it("key の tool が claude/codex 以外（形式不正）のとき、受け入れ条件どおり send.state が error になることを検証する", async () => {
+    const { api, postMessage } = makeFakeApi();
+    const timer = makeFakeTimer();
+    const store = createSessionStore({ api, setTimer: timer.setTimer });
+    store.getState().setReadOnly(false);
+
+    await store.getState().sendMessage("openai:00000000-0000-4000-8000-000000000001", "本文");
+
+    expect(postMessage).not.toHaveBeenCalled();
+    expect(store.getState().send.state).toBe("error");
+  });
+
+  it("key が codex: 形式のとき、messaging は claude 専用のため受け入れ条件どおり send.state が error になることを検証する", async () => {
+    const { api, postMessage } = makeFakeApi();
+    const timer = makeFakeTimer();
+    const store = createSessionStore({ api, setTimer: timer.setTimer });
+    store.getState().setReadOnly(false);
+
+    await store.getState().sendMessage("codex:00000000-0000-4000-8000-000000000009", "本文");
+
+    expect(postMessage).not.toHaveBeenCalled();
+    expect(store.getState().send.state).toBe("error");
   });
 });

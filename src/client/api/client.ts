@@ -43,6 +43,13 @@ export interface RefreshResponse {
   durationMs: number;
 }
 
+/** POST /api/sessions/:tool/:id/message の応答（ADR-0009）。 */
+export interface MessageResponse {
+  ok: boolean;
+  sentAt: string;
+  note: string;
+}
+
 /** サーバ API クライアント。すべて例外を投げず `Result` で返す。 */
 export interface ApiClient {
   getSessions(): Promise<Result<SessionsResponse, ApiErrorBody>>;
@@ -50,6 +57,12 @@ export interface ApiClient {
   getSession(tool: ToolKind, id: string): Promise<Result<SessionDetail, ApiErrorBody>>;
   getHealth(): Promise<Result<HealthResponse, ApiErrorBody>>;
   postRefresh(): Promise<Result<RefreshResponse, ApiErrorBody>>;
+  /** 稼働中の Claude セッションへ指示を送る（ADR-0009）。id は既存の isValidId で検証する。 */
+  postMessage(
+    tool: ToolKind,
+    id: string,
+    text: string,
+  ): Promise<Result<MessageResponse, ApiErrorBody>>;
 }
 
 /** `createApiClient` のオプション。 */
@@ -210,6 +223,10 @@ function isRefreshResponse(value: unknown): value is RefreshResponse {
   );
 }
 
+function isMessageResponse(value: unknown): value is MessageResponse {
+  return isRecord(value) && isBoolean(value.ok) && isString(value.sentAt) && isString(value.note);
+}
+
 /**
  * `ApiClient` を組み立てる。テストではフェイク `fetch` を渡す。
  * `opts.fetch` 省略時は `globalThis.fetch` をモジュール評価時ではなく **呼び出し時** に参照するラッパを使う。
@@ -241,6 +258,22 @@ export function createApiClient(opts: ApiClientOptions = {}): ApiClient {
 
     postRefresh: () =>
       request(fetchImpl, `${baseUrl}/api/refresh`, isRefreshResponse, { method: "POST" }),
+
+    postMessage: async (tool, id, text) => {
+      if (!isValidId(id)) {
+        return err(invalidIdError());
+      }
+      return request(
+        fetchImpl,
+        `${baseUrl}/api/sessions/${encodeURIComponent(tool)}/${encodeURIComponent(id)}/message`,
+        isMessageResponse,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        },
+      );
+    },
   };
 }
 

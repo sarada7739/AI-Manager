@@ -5,6 +5,10 @@ import { apiClient, createApiClient } from "../../../src/client/api/client";
 // 「api/client.ts が getSessions, getAccounts, getSession(tool, id), getHealth, postRefresh を持ち、
 //   HTTP エラーを ApiError（message + hint）に変換する」を検証する。
 // 実 fetch は使わず、フェイク fetch を注入する。合成データのみ。
+//
+// T-032 受け入れ条件（postMessage、DESIGN.md §6.11 / ADR-0009）:
+// 「正しい URL / method / body / content-type で fetch を呼ぶ」「応答の型ガード（ok / sentAt / note）」
+// 「id 不正で fetch を呼ばない」「502 の { error } を err にする」
 
 /** noUncheckedIndexedAccess 対策: 範囲内であることをテスト側で保証した上で要素を取り出す。 */
 function at<T>(arr: T[], index: number): T {
@@ -348,5 +352,87 @@ describe("createApiClient: getSession の id 検証", () => {
     await client.getSession("codex", VALID_ID);
     const expectedUrl = `/api/sessions/${encodeURIComponent("codex")}/${encodeURIComponent(VALID_ID)}`;
     expect(at(calls, 0).url).toBe(expectedUrl);
+  });
+});
+
+describe("createApiClient: postMessage（T-032 / ADR-0009）", () => {
+  it("正しい URL / method / body / Content-Type で fetch を呼ぶ", async () => {
+    const { fetchImpl, calls } = makeFakeFetch(() =>
+      jsonResponse(200, { ok: true, sentAt: "2026-01-01T00:00:00.000Z", note: "" }),
+    );
+    const client = createApiClient({ fetch: fetchImpl });
+    await client.postMessage("claude", VALID_ID, "合成本文");
+
+    expect(calls).toHaveLength(1);
+    const call = at(calls, 0);
+    expect(call.url).toBe(`/api/sessions/claude/${VALID_ID}/message`);
+    expect(call.init?.method).toBe("POST");
+    const headers = call.init?.headers as Record<string, string>;
+    expect(headers["Content-Type"]).toBe("application/json");
+    expect(headers.Accept).toBe("application/json");
+    expect(call.init?.body).toBe(JSON.stringify({ text: "合成本文" }));
+  });
+
+  it("応答の型ガード: ok / sentAt / note を満たさない応答は invalid_response になる", async () => {
+    const { fetchImpl } = makeFakeFetch(() =>
+      jsonResponse(200, { ok: true, sentAt: "2026-01-01T00:00:00.000Z" }),
+    );
+    const client = createApiClient({ fetch: fetchImpl });
+    const result = await client.postMessage("claude", VALID_ID, "本文");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("invalid_response");
+    }
+  });
+
+  it("応答の型ガード: 期待した形の応答は成功として値をそのまま返す", async () => {
+    const body = { ok: true, sentAt: "2026-01-01T00:00:00.000Z", note: "queued" };
+    const { fetchImpl } = makeFakeFetch(() => jsonResponse(200, body));
+    const client = createApiClient({ fetch: fetchImpl });
+    const result = await client.postMessage("claude", VALID_ID, "本文");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toEqual(body);
+    }
+  });
+
+  it("id が不正な形式のとき invalid_id を返し、fetch を呼ばない", async () => {
+    const { fetchImpl, calls } = makeFakeFetch(() => jsonResponse(200, {}));
+    const client = createApiClient({ fetch: fetchImpl });
+    const result = await client.postMessage("claude", "not-a-uuid", "本文");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("invalid_id");
+    }
+    expect(calls).toHaveLength(0);
+  });
+
+  it("502 で { error } 本文なら、その code / message / hint を err にする", async () => {
+    const errorBody = {
+      error: {
+        code: "read_only",
+        message: "読み取り専用のため送信できません。",
+        hint: "読み取り専用トグルを OFF にしてください。",
+      },
+    };
+    const { fetchImpl } = makeFakeFetch(() => jsonResponse(502, errorBody));
+    const client = createApiClient({ fetch: fetchImpl });
+    const result = await client.postMessage("claude", VALID_ID, "本文");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toEqual(errorBody.error);
+    }
+  });
+
+  it("502 で { error } 本文が無ければ http_502 になる", async () => {
+    const { fetchImpl } = makeFakeFetch(() => htmlResponse(502, "<html>Bad Gateway</html>"));
+    const client = createApiClient({ fetch: fetchImpl });
+    const result = await client.postMessage("claude", VALID_ID, "本文");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("http_502");
+      expect(result.error.message.length).toBeGreaterThan(0);
+      expect(result.error.hint.length).toBeGreaterThan(0);
+    }
   });
 });

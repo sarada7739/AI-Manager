@@ -8,3 +8,14 @@
   color: var(--color-text-3);
   white-space: nowrap;
 }
+
+/* 送信結果の表示（ADR-0009 / DESIGN.md §6.11）。自動更新表示（--text-xs）より一段大きい --text-sm。 */
+.send {
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+}
+
+/* 送信失敗（ADR-0009）。色だけで区別しないよう、テキスト側に「▲」を付ける（LiveStatus.tsx）。 */
+.error {
+  color: var(--color-danger);
+}

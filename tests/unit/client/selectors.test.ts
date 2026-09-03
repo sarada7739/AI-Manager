@@ -5,6 +5,7 @@ import {
   selectFilteredSessions,
   selectFolderOptions,
   selectGroups,
+  selectRunningClaudeSessions,
   selectSelectedSession,
   selectSortedSessions,
 } from "../../../src/client/store/selectors";
@@ -216,6 +217,30 @@ describe("selectCounts", () => {
     expect(counts.running).toBe(1);
     // sinceDays: 14 で "c"（20日前）が除外されるので visible は 3
     expect(counts.visible).toBe(3);
+  });
+});
+
+describe("selectRunningClaudeSessions（T-032 / ADR-0009）", () => {
+  it("running かつ claude のセッションだけを返す（idle の claude・running の codex は除外）", () => {
+    const store = createSessionStore({ api: makeUnusedApi() });
+    store.setState({ sessions: SESSIONS });
+    const result = selectRunningClaudeSessions(store.getState());
+    expect(result.map((s) => s.key)).toEqual(["a"]);
+  });
+
+  it("running な claude セッションが無ければ空配列を返す", () => {
+    const store = createSessionStore({ api: makeUnusedApi() });
+    store.setState({
+      sessions: SESSIONS.filter((s) => s.key !== "a"),
+    });
+    const result = selectRunningClaudeSessions(store.getState());
+    expect(result).toEqual([]);
+  });
+
+  it("sessions が空配列のとき空配列を返す", () => {
+    const store = createSessionStore({ api: makeUnusedApi() });
+    store.setState({ sessions: [] });
+    expect(selectRunningClaudeSessions(store.getState())).toEqual([]);
   });
 });
 

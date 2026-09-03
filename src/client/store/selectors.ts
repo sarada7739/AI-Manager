@@ -58,6 +58,16 @@ export function selectFolderOptions(
   return folderOptions(state.sessions);
 }
 
+/**
+ * 稼働中（running）の Claude セッションだけを抽出する。
+ * `ComposeBox` の宛先候補（DESIGN.md §6.11。Codex は宛先に出さない）。
+ */
+export function selectRunningClaudeSessions(state: SessionStoreState): SessionSummary[] {
+  return state.sessions.filter(
+    (session) => session.tool === "claude" && session.state === "running",
+  );
+}
+
 /** 選択中のセッション要約。未選択、または一覧から消えていれば null。 */
 export function selectSelectedSession(state: SessionStoreState): SessionSummary | null {
   if (state.selectedKey === null) {

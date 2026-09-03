@@ -5,7 +5,7 @@
 import { create } from "zustand";
 import type { GroupBy, SessionFilters, SortSpec } from "../../shared/grouping.js";
 import { DEFAULT_FILTERS, DEFAULT_SORT } from "../../shared/grouping.js";
-import type { Account, SessionSummary } from "../../shared/types.js";
+import type { Account, SessionSummary, ToolKind } from "../../shared/types.js";
 import type { ApiClient, ApiErrorBody } from "../api/client.js";
 import { apiClient } from "../api/client.js";
 
@@ -21,6 +21,15 @@ export interface SessionStoreStatus {
   live: boolean;
 }
 
+/** 指示送信の状態（ADR-0009 / T-032）。 */
+export interface SendStatus {
+  state: "idle" | "sending" | "sent" | "error";
+  /** 成功時「投函しました」、失敗時は API の message + hint。idle 時は空文字。 */
+  message: string;
+  /** 状態が確定した時刻（epoch ms）。idle 時は null。 */
+  at: number | null;
+}
+
 /** ストアが持つ状態とアクション。 */
 export interface SessionStoreState {
   sessions: SessionSummary[];
@@ -33,6 +42,8 @@ export interface SessionStoreState {
   readOnly: boolean;
   selectedKey: string | null;
   status: SessionStoreStatus;
+  /** 指示送信の状態（ADR-0009）。 */
+  send: SendStatus;
 
   /** セッション・アカウントを再取得する。多重フェッチはしない（進行中の Promise を共有する）。 */
   load(): Promise<void>;
@@ -49,6 +60,11 @@ export interface SessionStoreState {
   setLive(live: boolean): void;
   /** filters を DEFAULT_FILTERS に戻す（フィルタバーの「絞り込みを解除」用）。 */
   resetFilters(): void;
+  /**
+   * 稼働中の Claude セッションへ指示を送る（ADR-0009）。`key` は `claude:<id>` 形式。
+   * `readOnly` が true のときは何もしない（防御）。成功・失敗とも 10 秒後に idle へ戻す。
+   */
+  sendMessage(key: string, text: string): Promise<void>;
 }
 
 /** `createSessionStore` の依存。テストではフェイク api を渡す。 */
@@ -56,6 +72,8 @@ export interface SessionStoreDeps {
   api: ApiClient;
   /** 現在時刻。省略時は `() => new Date()`（テストでの差し替え用）。 */
   now?: () => Date;
+  /** send.state を idle に戻すタイマー。省略時は `setTimeout`（テストでの差し替え用）。 */
+  setTimer?: (callback: () => void, ms: number) => void;
 }
 
 /** ストア初期状態（アクションを除く）。 */
@@ -65,6 +83,30 @@ const INITIAL_STATUS: SessionStoreStatus = {
   lastFetchedAt: null,
   live: false,
 };
+
+/** send の初期状態。 */
+const INITIAL_SEND: SendStatus = { state: "idle", message: "", at: null };
+
+/** 送信結果（sent / error）表示を idle に戻すまでの時間（ms）。 */
+const SEND_RESET_DELAY_MS = 10_000;
+
+/**
+ * `key`（`${tool}:${id}` 形式）を tool / id に分解する。tool が ToolKind でなければ null。
+ * DetailPanel.tsx の isToolKind と同じ検証をストア側でも独立に持つ（feature → store の
+ * 逆方向 import は禁止のため）。
+ */
+function parseSessionKey(key: string): { tool: ToolKind; id: string } | null {
+  const separatorIndex = key.indexOf(":");
+  if (separatorIndex < 0) {
+    return null;
+  }
+  const tool = key.slice(0, separatorIndex);
+  const id = key.slice(separatorIndex + 1);
+  if (tool !== "claude" && tool !== "codex") {
+    return null;
+  }
+  return { tool, id };
+}
 
 /**
  * `view` の初期値（= URL 同期の既定値）。
@@ -163,6 +205,7 @@ export function createSessionStore(deps: SessionStoreDeps) {
       readOnly: true,
       selectedKey: null,
       status: INITIAL_STATUS,
+      send: INITIAL_SEND,
 
       load: () => {
         if (inFlightLoad) {
@@ -195,6 +238,48 @@ export function createSessionStore(deps: SessionStoreDeps) {
       setLive: (live) => set((state) => ({ status: { ...state.status, live } })),
       // 既定値のままでも新しい参照にして、selector 購読が変化を検知できるようにする
       resetFilters: () => set({ filters: { ...DEFAULT_FILTERS } }),
+
+      sendMessage: async (key, text) => {
+        // 読み取り専用のときは呼ばれても何もしない（防御。ComposeBox 側でも「送る」を無効化する）。
+        if (get().readOnly) {
+          return;
+        }
+        const timer =
+          deps.setTimer ?? ((callback: () => void, ms: number) => setTimeout(callback, ms));
+
+        // 不正な key、または送信非対応のツール（Codex は ADR-0009 で送信対象外）は、
+        // API を呼ばずにエラー状態にして利用者に理由を見せる（無反応にしない）。
+        const parsed = parseSessionKey(key);
+        if (parsed === null || parsed.tool !== "claude") {
+          set({
+            send: {
+              state: "error",
+              message:
+                "このセッションには送信できません。 一覧から稼働中の Claude セッションを選んでください。",
+              at: now().getTime(),
+            },
+          });
+          timer(() => set({ send: { ...INITIAL_SEND } }), SEND_RESET_DELAY_MS);
+          return;
+        }
+
+        set({ send: { state: "sending", message: "", at: null } });
+        const result = await deps.api.postMessage(parsed.tool, parsed.id, text);
+
+        if (result.ok) {
+          set({ send: { state: "sent", message: "投函しました", at: now().getTime() } });
+        } else {
+          set({
+            send: {
+              state: "error",
+              message: `${result.error.message} ${result.error.hint}`,
+              at: now().getTime(),
+            },
+          });
+        }
+
+        timer(() => set({ send: { ...INITIAL_SEND } }), SEND_RESET_DELAY_MS);
+      },
     };
   });
 }
