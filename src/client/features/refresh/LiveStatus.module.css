@@ -1,0 +1,10 @@
+/*
+ * 自動更新の状態表示。DESIGN.md §6.9 の「更新中はヘッダ帯右端にテキストだけ」に対応する。
+ * トークン経由のみ。
+ */
+.status {
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  color: var(--color-text-3);
+  white-space: nowrap;
+}

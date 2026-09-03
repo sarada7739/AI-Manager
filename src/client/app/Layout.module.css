@@ -7,15 +7,17 @@
   min-height: 100%;
 }
 
-.header {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
+/*
+ * ヘッダ帯の固定表示（sticky）は T-025 で廃止した（`.header` セレクタごと削除）。
+ * フィルタバー（FilterBar.module.css）は上端に固定表示されたままだが、ヘッダ帯の高さを
+ * 表す --header-height 相当のトークンが tokens.css に無く両立できないため、フィルタバー側の
+ * 固定表示を活かす方を優先した（判断は TASKS.md の T-025 引き継ぎに記載）。
+ * ヘッダ帯の固定表示は Phase 4 で --header-height を足して両立させる。
+ */
 
+/* FilterBar は自前で左右パディングを持つため、ここでは compose / accounts だけに適用する。 */
 .compose,
-.accounts,
-.filters {
+.accounts {
   padding: 0 var(--space-5);
 }
 

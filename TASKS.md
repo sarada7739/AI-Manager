@@ -1,9 +1,9 @@
 # TASKS.md — タスク台帳（進捗の唯一の真実）
 
 ## 進捗サマリ
-- 全 26 件 / 完了 24 件 / 進行中 2 件 / 未着手 0 件
-- 現在のタスク: T-025（レビュー中）/ T-026（テスト中）。残り 2 件
-- 最終更新: 2026-09-03T17:35:00+09:00
+- 全 26 件 / 完了 25 件 / 進行中 1 件 / 未着手 0 件
+- 現在のタスク: T-026（レビュー Round 2）。残り 1 件
+- 最終更新: 2026-09-03T17:45:00+09:00
 
 ## フェーズ進捗
 
@@ -45,7 +45,7 @@
 | T-022 | アカウント帯 | T-020 | done | 2 | #23 |
 | T-023 | ボード表示（列・カード・仮想スクロール） | T-021 | done | 3 | #27 |
 | T-024 | リスト表示（テーブル・並べ替え・仮想スクロール） | T-021 | done | 3 | #26 |
-| T-025 | 詳細パネル・指示入力欄（無効）・自動更新・キーボード操作 | T-014, T-015, T-023, T-024 | in_progress | 1 | - |
+| T-025 | 詳細パネル・指示入力欄（無効）・自動更新・キーボード操作 | T-014, T-015, T-023, T-024 | done | 2 | #28 |
 | T-026 | E2E と README | T-022, T-025 | in_progress | 1 | - |
 
 依存グラフは DAG（循環なし）。実行順は ID 順で依存を満たす。
@@ -355,13 +355,14 @@
 ### T-025 詳細パネル・指示入力欄（無効）・自動更新・キーボード操作
 - **目的**: F-5 詳細、F-7 の無効表示、F-9 の自動更新を繋ぐ
 - **受け入れ条件**:
-  - [ ] `DetailPanel` が右側 `--panel-width` に開き、DESIGN.md §5.3 の項目を表示。`recentMessages` を role ラベル付きで最大 20 件。`Esc` / `×` で閉じる。読み込み中は `Loading`、失敗は `ErrorBanner`
-  - [ ] `ComposeBox` がテキストエリア + アカウントピル + フォルダセレクト + 「送る」`primary` ボタンを **disabled** で表示し、理由「第 1 段階では送信経路が未確認のため無効です（ADR 承認後に有効化）」を出す
-  - [ ] `/api/events` を購読し `sessions-changed` で `refresh()`。SSE が切れたら 10 秒ごとのポーリングにフォールバックし、ヘッダ帯右端に「更新中」/「自動更新: 接続 / ポーリング」を表示
-  - [ ] `prefers-reduced-motion` でパネル開閉のアニメーションが 0ms
-  - [ ] 詳細パネルの `secrets` マスクはサーバ側で済んでいることを前提に、クライアントは加工しない
+  - [x] `DetailPanel` が右側 `--panel-width` に開き、DESIGN.md §5.3 の項目を表示。`recentMessages` を role ラベル付きで最大 20 件。`Esc` / `×` で閉じる。読み込み中は `Loading`、失敗は `ErrorBanner`
+  - [x] `ComposeBox` がテキストエリア + アカウントピル + フォルダセレクト + 「送る」`primary` ボタンを **disabled** で表示し、理由「第 1 段階では送信経路が未確認のため無効です（ADR 承認後に有効化）」を出す
+  - [x] `/api/events` を購読し `sessions-changed` で `load()`（サーバ側で再走査済みのため `refresh()` ではない。ARCHITECTURE §4.2）。SSE が切れたら 10 秒ごとのポーリングにフォールバックし、ヘッダ帯右端に「更新中」/「自動更新: 接続 / ポーリング」を表示
+  - [x] `prefers-reduced-motion` でパネル開閉のアニメーションが 0ms
+  - [x] 詳細パネルの `secrets` マスクはサーバ側で済んでいることを前提に、クライアントは加工しない
 - **参照**: DESIGN.md §5.3, §6.6, §6.9, §6.10 / ARCHITECTURE.md §4.2, §9
-- **触ってよい範囲**: `src/client/features/session-detail/**`, `src/client/features/compose/**`, `src/client/features/refresh/**`, `src/client/app/App.tsx`
+- **触ってよい範囲**: `src/client/features/session-detail/**`, `src/client/features/compose/**`, `src/client/features/refresh/**`, `src/client/app/**`（`App.tsx` / `App.module.css` / `Layout.*` / `Header.*` の配線と `ViewPlaceholder` の削除を含む）
+- **T-025 レビューからの引き継ぎ（Phase 4）**: **ヘッダ帯は sticky にしない**（`--header-height` トークンが無く、フィルタバーの sticky と `top` を両立できないため。DESIGN.md §5.1「ヘッダ帯とフィルタバーは sticky」からの意図的な逸脱。Phase 4 で `--header-height` を DESIGN.md §9 / tokens.css に追加して両立させ、DESIGN.md に注記か ADR を残す）。`DetailPanel` の `formatFixedDateTime` / `pad2` は `shared/time.ts` に `formatDateTime(iso)` として集約する。`LiveStatus` は live region なので「更新中」の切り替えを読み上げ対象から外す案。`<section aria-label="指示入力">` と `<section aria-label="絞り込み">` は Layout 側と feature 側で入れ子（Layout 側のラベルを外す）。`DetailPanel` は取得 / スライドイン / フォーカス管理 / Esc をカスタムフックに分割候補。閉じるボタンは `components/Button` が `data-*` / `ref` を透過しないためネイティブ `<button>`（`Button` に `ref` 転送を足せば戻せる）。`HEARTBEAT_TIMEOUT_MS = 60_000` はサーバ 30 秒の 1 回分の取りこぼしを吸収（2 回目と同時刻で競合）。Codex の `user_message` と `response_item(user)` の重複は詳細パネルで実データ確認
 
 ### T-026 E2E と README
 - **目的**: 主要導線の E2E と、README どおりに起動できること
@@ -371,5 +372,5 @@
   - [ ] `README.md`（日本語）: 概要、前提（Windows 11 / Node / pnpm）、セットアップ、起動、`local-data/config.json` の例（表示名の上書き、`activeWindowMinutes`）、読み取り専用である旨と読まないファイルの一覧、トラブルシュート（`~/.claude/projects` が無い、プロセス情報が取れない）
   - [ ] README の手順どおりに `pnpm install` → `pnpm dev` で起動できる
 - **参照**: harness.md §10 / ARCHITECTURE.md §8
-- **触ってよい範囲**: `e2e/**`, `README.md`, `playwright.config.ts`, `package.json`（e2e script のみ）
+- **触ってよい範囲**: `e2e/**`, `README.md`, `playwright.config.ts`, `package.json`（e2e script のみ）、`tests/unit/readme-contract.test.ts`（tester）。メインの判断で `src/server/config.ts`（`AI_MANAGER_CONFIG_PATH`）と `vite.config.ts`（`/api` プロキシの限定）も同時に変更
 - **T-001 レビューからの引き継ぎ**: `playwright.config.ts` の `baseURL` は Hono のポートを指しているが静的配信をしていない。`webServer` でサーバとクライアントを起動する形に見直す

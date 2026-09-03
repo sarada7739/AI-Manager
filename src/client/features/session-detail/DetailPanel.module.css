@@ -1,0 +1,150 @@
+/*
+ * 詳細パネル。右側固定幅 --panel-width（DESIGN.md §5.3）。トークン経由のみ。
+ * 開閉は transform の transition（reduced motion では tokens.css により --duration-normal が 0ms）。
+ */
+.panel {
+  width: var(--panel-width);
+  flex: 0 0 auto;
+  padding: var(--space-4);
+  background: var(--color-surface-2);
+  border-left: 1px solid var(--color-border);
+  transform: translateX(100%);
+  transition: transform var(--duration-normal) var(--easing);
+}
+
+.panel.entered {
+  transform: translateX(0);
+}
+
+.headerRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.stateLabel {
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  color: var(--color-text-2);
+}
+
+/*
+ * 閉じるボタン。components/Button.module.css の .button + .ghost と同じトークンの組み合わせ
+ * （Button コンポーネント自体は data-* を透過しないためネイティブ button で再現する）。
+ */
+.closeButton {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--control-height);
+  min-width: var(--control-height);
+  padding: 0 var(--space-2);
+  background: transparent;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-2);
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+  font-family: inherit;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--easing);
+}
+
+.closeButton:hover {
+  background: var(--color-surface-3);
+}
+
+.title {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-lg);
+  line-height: var(--leading-lg);
+  font-weight: var(--weight-medium);
+  color: var(--color-text);
+}
+
+.divider {
+  margin: var(--space-3) 0;
+  border: none;
+  border-top: 1px solid var(--color-border);
+}
+
+.summaryList {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-1) var(--space-3);
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+}
+
+.summaryList dt {
+  color: var(--color-text-3);
+}
+
+.summaryList dd {
+  margin: 0;
+  color: var(--color-text-2);
+  overflow-wrap: anywhere;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.messagesHeading {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-2);
+}
+
+.messageList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.messageItem {
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: var(--space-2);
+}
+
+.messageMeta {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+}
+
+.roleLabel {
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  color: var(--color-text-3);
+}
+
+.messageAt {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  color: var(--color-text-3);
+}
+
+.messageText {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  color: var(--color-text-2);
+  white-space: pre-wrap;
+}
+
+.warnings {
+  margin-top: var(--space-2);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  color: var(--color-text-3);
+}
