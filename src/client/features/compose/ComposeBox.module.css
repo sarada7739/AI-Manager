@@ -1,5 +1,5 @@
 /*
- * 指示入力欄（無効表示）。surface-2 地 + 1px 境界線（タスクカード指定）。トークン経由のみ。
+ * 指示入力欄。surface-2 地 + 1px 境界線（タスクカード指定）。トークン経由のみ。
  */
 .compose {
   display: flex;
@@ -22,11 +22,11 @@
   font-family: var(--font-ui);
   font-size: var(--text-md);
   line-height: var(--leading-md);
-  color: var(--color-text-muted);
+  color: var(--color-text);
 }
 
 .textarea::placeholder {
-  color: var(--color-text-muted);
+  color: var(--color-text-3);
 }
 
 .row {
@@ -36,36 +36,83 @@
   flex-wrap: wrap;
 }
 
-.accountPills {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-
-/*
- * DESIGN.md §6.3 の輪郭ピルの見た目を非対話要素（span）で再現する。
- * components/Pill.module.css の .pill + .tool と同じトークンの組み合わせ。
- */
-.accountPill {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  border: 1px solid var(--color-text-2);
-  border-radius: var(--radius-pill);
-  padding: 1px var(--space-2);
-  font-size: var(--text-xs);
-  line-height: var(--leading-xs);
-  letter-spacing: var(--tracking-wide);
-  color: var(--color-text-2);
-}
-
 .select {
   height: var(--control-height);
   padding: 0 var(--space-2);
   background: var(--color-surface-1);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
-  color: var(--color-text-muted);
+  color: var(--color-text-2);
   font-family: var(--font-ui);
   font-size: var(--text-md);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 確認ダイアログの内容（DESIGN.md §6.11。ComposeBox 側で組む）。 */
+.confirmList {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-1) var(--space-3);
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+}
+
+.confirmList dt {
+  color: var(--color-text-3);
+}
+
+.confirmList dd {
+  margin: 0;
+  color: var(--color-text-2);
+  overflow-wrap: anywhere;
+}
+
+.preview {
+  white-space: pre-wrap;
+}
+
+.note {
+  margin: 0 0 var(--space-4);
+  color: var(--color-text-3);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+}
+
+.confirmActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/*
+ * 確認ダイアログの「送る」にネイティブ ref を張る必要があるため、
+ * components/Button.module.css の .button + .primary/.disabled と同じ
+ * トークンの組み合わせをローカルで再現する（DetailPanel の閉じるボタンと同じ方針）。
+ */
+.primaryButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--control-height);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+  font-family: inherit;
+  cursor: pointer;
+  background: var(--gradient-primary);
+  color: var(--color-on-signal);
+  transition:
+    background var(--duration-fast) var(--easing),
+    border-color var(--duration-fast) var(--easing);
+}
+
+.disabledButton {
+  background: var(--color-surface-3);
+  color: var(--color-text-muted);
+  border-color: transparent;
+  cursor: not-allowed;
 }

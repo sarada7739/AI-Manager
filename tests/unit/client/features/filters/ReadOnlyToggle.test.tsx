@@ -1,5 +1,6 @@
-// T-021 受け入れ条件（ReadOnlyToggle）:
-// 「『読むだけ・送信はしない』トグル（既定 ON）。OFF にすると隣に『第 1 段階では送信できません』を表示」
+// T-032 受け入れ条件（ReadOnlyToggle、DESIGN.md §6.4 / ADR-0009）:
+// 「『読むだけ・送信はしない』トグル（既定 ON）。OFF にすると隣に
+//   『送信できます（送る前に確認が出ます）』を表示」
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ReadOnlyToggle } from "../../../../../src/client/features/filters/ReadOnlyToggle.js";
@@ -33,16 +34,16 @@ describe("ReadOnlyToggle", () => {
     expect(screen.getByRole("switch")).toHaveAttribute("aria-checked", "true");
   });
 
-  it("既定（ON）のとき『第 1 段階では送信できません』の注記は表示されない", () => {
+  it("既定（ON）のとき『送信できます（送る前に確認が出ます）』の注記は表示されない", () => {
     render(<ReadOnlyToggle />);
-    expect(screen.queryByText(/第 1 段階では送信できません/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/送信できます（送る前に確認が出ます）/)).not.toBeInTheDocument();
   });
 
-  it("クリックすると getState().readOnly が false になり、注記『第 1 段階では送信できません』が表示される", () => {
+  it("クリックすると getState().readOnly が false になり、注記『送信できます（送る前に確認が出ます）』が表示される", () => {
     render(<ReadOnlyToggle />);
     fireEvent.click(screen.getByRole("switch"));
     expect(useSessionStore.getState().readOnly).toBe(false);
-    expect(screen.getByText(/第 1 段階では送信できません/)).toBeInTheDocument();
+    expect(screen.getByText(/送信できます（送る前に確認が出ます）/)).toBeInTheDocument();
     expect(screen.getByRole("switch")).toHaveAttribute("aria-checked", "false");
   });
 
@@ -54,7 +55,7 @@ describe("ReadOnlyToggle", () => {
     fireEvent.click(toggle);
     expect(useSessionStore.getState().readOnly).toBe(true);
     expect(screen.getByRole("switch")).toHaveAttribute("aria-checked", "true");
-    expect(screen.queryByText(/第 1 段階では送信できません/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/送信できます（送る前に確認が出ます）/)).not.toBeInTheDocument();
   });
 
   it("ストアの外側から readOnly を false にした場合も注記が表示される（表示はストア駆動）", () => {
@@ -62,6 +63,6 @@ describe("ReadOnlyToggle", () => {
     act(() => {
       useSessionStore.setState({ readOnly: false });
     });
-    expect(screen.getByText(/第 1 段階では送信できません/)).toBeInTheDocument();
+    expect(screen.getByText(/送信できます（送る前に確認が出ます）/)).toBeInTheDocument();
   });
 });

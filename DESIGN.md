@@ -179,8 +179,8 @@ rgba / hex を含む値はここ（と tokens.css）にだけ書く。CSS Module
 │ AI-Manager   22:45 現在   Claude 46 / Codex 3 件           [ボード][リスト] [更新] │  ヘッダ帯 (surface-1)
 ├──────────────────────────────────────────────────────────────────────────────┤
 │ ┌──────────────────────────────────────────────────────────────────────────┐ │
-│ │ ここに指示を書く（第 1 段階では無効: 送信経路が未確認）                    │ │  指示入力 (surface-2, disabled)
-│ │ (● Claude Desktop 1) (○ Claude CLI) (○ Codex)  [フォルダ ▾]        [送る] │ │
+│ │ ここに指示を書く（読むだけ OFF + 稼働中の宛先を選ぶと有効）              │ │  指示入力 (surface-2)
+│ │ 宛先 [● harness.md フェーズ… ~/AI-Manager ▾]                       [送る] │ │
 │ └──────────────────────────────────────────────────────────────────────────┘ │
 │ アカウント                                            Claude Code 1 · Codex 0 稼働 │
 │ [● Claude Desktop 1  稼働中 22:11〜] [○ Claude CLI  停止] [○ Codex  停止]        │  アカウント帯
@@ -268,13 +268,13 @@ rgba / hex を含む値はここ（と tokens.css）にだけ書く。CSS Module
 - セグメント（並べ方・絞り込み）は `Pill.filter` の横並び。選択中は 1 つだけ。
 - セレクトは `--color-surface-2` 背景、`1px solid --color-border-strong`、`--radius-sm`、高さ `--control-height: 28px`。
 - 検索欄は同じ枠。フォーカスで枠が `--color-focus` に変わる。グローは付けない。
-- 「読むだけ・送信はしない」トグルは `Toggle` を使い、ON が既定。OFF にしても第 1 段階では送信できない旨を隣に表示する。
+- 「読むだけ・送信はしない」トグルは `Toggle` を使い、ON が既定。OFF のときは「送信できます（送る前に確認が出ます）」を隣に表示する（第 2 段階、ADR-0009）。
 
 ### 6.5 トグル `Toggle`
 - 幅 `32px`、高さ `18px`、角丸 `--radius-pill`。OFF: `--color-surface-3` 地 + `--color-text-3` ノブ。ON: `--color-signal-dim` 地 + `--color-signal` ノブ。ラベルは必ず横に置く。
 
 ### 6.6 ボタン `Button`
-- `primary`: 背景 `--gradient-primary`、文字 `--color-on-signal`、`--radius-sm`、高さ `--control-height`。画面に 1 つまで（「送る」）。無効時は背景 `--color-surface-3`、文字 `--color-text-muted`、カーソル `not-allowed`、隣に理由を表示。
+- `primary`: 背景 `--gradient-primary`、文字 `--color-on-signal`、`--radius-sm`、高さ `--control-height`。画面に 1 つまで（「送る」）。確認ダイアログ（§6.11）の「送る」も primary だが、モーダル表示中は背景を操作できないため、操作可能な primary は常に 1 つ。無効時は背景 `--color-surface-3`、文字 `--color-text-muted`、カーソル `not-allowed`、隣に理由を表示。
 - `ghost`: 背景なし、`1px solid --color-border-strong`、文字 `--color-text-2`。「更新」「閉じる」に使う。「ボード / リスト」の表示切替は選択状態（`aria-pressed`）を伝える必要があるため §6.4 と同じ `Pill.filter` のセグメントにする。
 
 ### 6.7 アカウントチップ `AccountChip`
@@ -291,6 +291,16 @@ rgba / hex を含む値はここ（と tokens.css）にだけ書く。CSS Module
 ### 6.10 エラー `ErrorBanner`
 - フィルタバー直下。`1px solid --color-danger`、文字 `--color-danger`、背景は `--color-surface-2`。
 - 文言は「何が起きたか + 次にどうするか」。例: 「セッションログを読めませんでした（~/.claude/projects が見つかりません）。Claude Code を一度起動してから「更新」を押してください。」
+
+### 6.11 指示入力 `ComposeBox` と確認ダイアログ `Dialog`（第 2 段階、ADR-0009）
+- `ComposeBox`: テキストエリア + 宛先セレクト + 「送る」（`primary`）。宛先は **稼働中（`running`）の Claude セッションだけ** を列挙し、表示はタイトル + フォルダ（`--font-mono` ではなく本文書体。フォルダは先頭省略）。ボードやリストでセッションを選ぶと宛先に反映する。
+- 無効条件と理由（`Button.reason`）: 読み取り専用トグルが ON →「読み取り専用です。送るにはトグルを OFF にしてください」。宛先が無い →「稼働中の Claude セッションがありません」。本文が空 →「指示を入力してください」。Codex は宛先に出さない。
+- 「送る」を押すと **確認ダイアログ** を開く。送信は必ずダイアログの「送る」から行う（2 段階）。
+- `Dialog`: `role="dialog"` + `aria-modal="true"` + `aria-labelledby`。背景 `--color-surface-2` に `--gradient-surface`、境界 `1px solid --color-border-strong`、角丸 `--radius-md`、影 `--shadow-overlay`（§4.3 の例外）、パディング `--space-4`、幅は最大 `--panel-width`。背後は `--color-bg` を半透明にせず、`--shadow-overlay` の段差だけで区別する（オーバーレイ色のトークンは持たない）。
+- ダイアログの内容: 見出し「この指示を送りますか」、宛先（セッション名 / フォルダ）、本文の先頭 200 文字（超える場合は `…`）、「配信されるか保留されるかは受信側の設定に従います」の注記（`--color-text-3`、`--text-xs`）、ボタンは「キャンセル」（`ghost`）と「送る」（`primary`）。
+- キーボード: 開いたら「送る」にフォーカス。`Tab` はダイアログ内で循環。`Esc` と「キャンセル」で閉じ、フォーカスを元の「送る」ボタンへ戻す。
+- 送信中は両ボタンを無効にし「送信中…」。結果はダイアログを閉じた後、ヘッダ帯右端（`LiveStatus` と同じ場所）に「送信: 投函しました」または「送信: 失敗（理由）」を `--text-sm` で 10 秒表示する。色だけで区別せず、失敗は `--color-danger` + `▲`。
+- 送信後はテキストエリアを空にし、宛先は保持する。
 
 ---
 

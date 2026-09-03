@@ -1,9 +1,13 @@
 // T-025 受け入れ条件（LiveStatus）:
 // 「ヘッダ帯右端に『更新中』/『自動更新: 接続 / ポーリング』を表示」
 // DESIGN.md §6.9「更新中はヘッダ帯右端にテキストだけ出す」に対応する。
+//
+// T-032 受け入れ条件（DESIGN.md §6.11 / ADR-0009）:
+// 「送信結果（投函 / 失敗 / 送信中）を LiveStatus に出す。idle に戻ると自動更新の表示に戻る」
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { LiveStatus } from "../../../../../src/client/features/refresh/LiveStatus.js";
+import liveStatusStyles from "../../../../../src/client/features/refresh/LiveStatus.module.css";
 import { useSessionStore } from "../../../../../src/client/store/useSessionStore.js";
 import { DEFAULT_FILTERS, DEFAULT_SORT } from "../../../../../src/shared/grouping.js";
 import type { SessionSummary } from "../../../../../src/shared/types.js";
@@ -48,6 +52,7 @@ function resetStore(): void {
     readOnly: true,
     selectedKey: null,
     status: { loading: false, error: null, lastFetchedAt: null, live: false },
+    send: { state: "idle", message: "", at: null },
   });
 }
 
@@ -98,5 +103,82 @@ describe("LiveStatus", () => {
     render(<LiveStatus />);
     expect(screen.queryByText("更新中")).not.toBeInTheDocument();
     expect(screen.getByText("自動更新: ポーリング")).toBeInTheDocument();
+  });
+
+  it("send.state が sending のとき『送信中…』が role=status のまま表示される", () => {
+    useSessionStore.setState({
+      sessions: [makeSession()],
+      status: { loading: false, error: null, lastFetchedAt: null, live: true },
+      send: { state: "sending", message: "", at: null },
+    });
+    render(<LiveStatus />);
+    expect(screen.getByRole("status")).toHaveTextContent("送信中…");
+    // 送信中は自動更新の表示より優先される。
+    expect(screen.queryByText("自動更新: 接続")).not.toBeInTheDocument();
+  });
+
+  it("send.state が sent のとき『送信: 投函しました』が表示される", () => {
+    useSessionStore.setState({
+      sessions: [makeSession()],
+      status: { loading: false, error: null, lastFetchedAt: null, live: true },
+      send: { state: "sent", message: "投函しました", at: Date.now() },
+    });
+    render(<LiveStatus />);
+    expect(screen.getByRole("status")).toHaveTextContent("送信: 投函しました");
+  });
+
+  it("send.state が error のとき▲を含む失敗表示が role=status のまま出る", () => {
+    useSessionStore.setState({
+      sessions: [makeSession()],
+      status: { loading: false, error: null, lastFetchedAt: null, live: true },
+      send: {
+        state: "error",
+        message: "送信に失敗しました。 時間をおいて再試行してください。",
+        at: Date.now(),
+      },
+    });
+    render(<LiveStatus />);
+    const status = screen.getByRole("status");
+    expect(status.textContent).toContain("▲");
+    expect(status.textContent).toContain("送信に失敗しました。");
+  });
+
+  it("send.state が idle に戻ると自動更新の表示に戻る", () => {
+    useSessionStore.setState({
+      sessions: [makeSession()],
+      status: { loading: false, error: null, lastFetchedAt: null, live: true },
+      send: { state: "idle", message: "", at: null },
+    });
+    render(<LiveStatus />);
+    expect(screen.getByText("自動更新: 接続")).toBeInTheDocument();
+    expect(screen.queryByText(/送信/)).not.toBeInTheDocument();
+  });
+
+  // reviewer BLOCKING 対応: 送信結果（sending / sent / error）は DESIGN.md §6.11 の
+  // --text-sm 指定に合わせるため styles.send クラスを付ける（自動更新表示の --text-xs とは別クラス）。
+  it.each<["sending" | "sent" | "error"]>([["sending"], ["sent"], ["error"]])(
+    "send.state が %s のとき styles.send クラスが付く",
+    (state) => {
+      useSessionStore.setState({
+        sessions: [makeSession()],
+        status: { loading: false, error: null, lastFetchedAt: null, live: true },
+        send: { state, message: "失敗しました。 再試行してください。", at: Date.now() },
+      });
+      render(<LiveStatus />);
+      const status = screen.getByRole("status");
+      expect(liveStatusStyles.send).toBeTruthy();
+      expect(status.className.split(" ")).toContain(liveStatusStyles.send);
+    },
+  );
+
+  it("send.state が idle（自動更新表示）のときは styles.send クラスが付かない", () => {
+    useSessionStore.setState({
+      sessions: [makeSession()],
+      status: { loading: false, error: null, lastFetchedAt: null, live: true },
+      send: { state: "idle", message: "", at: null },
+    });
+    render(<LiveStatus />);
+    const status = screen.getByRole("status");
+    expect(status.className.split(" ")).not.toContain(liveStatusStyles.send);
   });
 });
