@@ -1,0 +1,55 @@
+/*
+ * 列ヘッダ。下線 1px、稼働ありは 2px の --color-signal（DESIGN.md §6.2）。
+ */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-1);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--text-lg);
+  line-height: var(--leading-lg);
+  font-weight: var(--weight-medium);
+  color: var(--color-text);
+}
+
+.header[data-has-running="true"] {
+  border-bottom: 2px solid var(--color-signal);
+}
+
+.left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.count {
+  flex-shrink: 0;
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  color: var(--color-text-2);
+}
+
+/* 数値部分だけ等幅（DESIGN.md §3 で等幅の用途は限定されており、「稼働」「/」は本文用フォントのまま）。 */
+.countNumber {
+  font-family: var(--font-mono);
+  color: var(--color-text);
+}
+
+.countText {
+  font-family: var(--font-ui);
+}
