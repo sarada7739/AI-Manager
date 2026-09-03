@@ -6,18 +6,19 @@
   flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-3);
-  background: var(--color-surface-2);
+  background-color: var(--color-surface-2);
+  background-image: var(--gradient-surface);
   border-top: 1px solid var(--color-border);
   border-right: 1px solid var(--color-border);
   border-bottom: 1px solid var(--color-border);
   border-left: var(--card-accent-width) solid transparent;
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: background var(--duration-fast) var(--easing);
+  transition: background-color var(--duration-fast) var(--easing);
 }
 
 .card:hover {
-  background: var(--color-surface-3);
+  background-color: var(--color-surface-3);
 }
 
 .card:focus-visible {
@@ -34,6 +35,7 @@
 
 .card[data-state="running"] {
   border-left-color: var(--color-signal);
+  box-shadow: var(--glow-signal);
 }
 
 .card[data-state="active"] {

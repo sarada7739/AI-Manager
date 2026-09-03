@@ -4,6 +4,7 @@
 > すべての値は `src/client/styles/tokens.css` の CSS カスタムプロパティとして定義し、コンポーネントはトークン経由でのみ参照する。
 > 参考画像（クリーム地 + テラコッタ）の配色・書体・見た目は一切流用しない。参考にしたのは情報構造だけ。
 > 黒基調の出発点として `docs/reference/style-reference-harness-io.md` を参照したが、管制画面向けに再構成した（ADR-0006）。
+> 2026-09-03 に利用者の指示で配色を藍〜紫のインディゴ基調に改め、稼働中の表示にだけ光彩を、ページ背景にグラデーションを許可した（ADR-0008）。レイアウト・余白・角丸・状態の形は変えていない。
 
 ---
 
@@ -17,48 +18,48 @@
 
 | 性質 | 判断 |
 |---|---|
-| 長時間表示される | 黒基調・低輝度。白面積を最小化し、目の疲労を抑える。装飾アニメーションを入れない |
-| 視線が何度も戻る | 情報の位置を固定する。列の順序・カードの構造を状態で変えない。「今動いているもの」だけが光る |
+| 長時間表示される | 藍基調・低輝度。白面積を最小化し、目の疲労を抑える。装飾アニメーションを入れない。光彩は静的（点滅しない） |
+| 視線が何度も戻る | 情報の位置を固定する。列の順序・カードの構造を状態で変えない。「今動いているもの」だけが光彩を伴って光る |
 | 一目で把握 | 稼働状態は列ヘッダとカードの左端で分かる。文字を読む前に形で分かる |
 | 数百件を扱う | 密度は高め。カードは 3 行に収める。仮想スクロールで描画を絞る |
 | 誤操作を防ぐ | 既定で読み取り専用。送信系は無効表示で理由を出す |
 
-**大胆さは 1 か所に集中させる**: 「稼働中」を示すフォスファーミント（`--color-signal`）だけが画面で光る。それ以外は無彩色。
+**大胆さは 1 か所に集中させる**: 光彩を伴って光るのは「稼働中」を示すバイオレット（`--color-signal` + `--glow-signal`）だけ。それ以外の装飾は §2.5 に列挙したものに限る（ページ背景の `--gradient-page`、面の上端の `--gradient-surface`、塗りつぶしボタンの `--gradient-primary`、ページタイトルの `--glow-title`）。いずれも静的で、状態によって変化しない。
 
 ---
 
 ## 2. カラートークン
 
-### 2.1 ベース（無彩色 6 段）
+### 2.1 ベース（藍寄り 6 段）
 
 | トークン | 値 | 役割 |
 |---|---|---|
-| `--color-bg` | `#070707` | ページ背景。最下層 |
-| `--color-surface-1` | `#0d0e12` | 列の背景、ヘッダ帯 |
-| `--color-surface-2` | `#141418` | カード、入力欄、パネル |
-| `--color-surface-3` | `#1c1d24` | ホバー、選択行、ネストしたパネル |
-| `--color-border` | `#22222a` | 通常の境界線 |
-| `--color-border-strong` | `#3a3c46` | 列の区切り、フォーカスしていない入力欄の枠 |
+| `--color-bg` | `#06060f` | ページ背景。最下層（実際の描画は `--gradient-page` を重ねる） |
+| `--color-surface-1` | `#0b0b1c` | 列の背景、ヘッダ帯 |
+| `--color-surface-2` | `#12122b` | カード、入力欄、パネル |
+| `--color-surface-3` | `#1a1a3c` | ホバー、選択行、ネストしたパネル |
+| `--color-border` | `#2a2a60` | 通常の境界線 |
+| `--color-border-strong` | `#3b3b78` | 列の区切り、フォーカスしていない入力欄の枠 |
 
 ### 2.2 テキスト（4 段）
 
 | トークン | 値 | 役割 | 対 surface-2 コントラスト |
 |---|---|---|---|
-| `--color-text` | `#f0f0f0` | タイトル、主要な数値 | 16.4:1 |
-| `--color-text-2` | `#c8cad0` | 本文、最終メッセージ | 11.6:1 |
-| `--color-text-3` | `#8f919b` | メタ情報（時刻、サイズ、パス） | 6.0:1 |
-| `--color-text-muted` | `#60606c` | 無効状態、プレースホルダ | 3.1:1（無効要素にのみ使う） |
+| `--color-text` | `#eef0ff` | タイトル、主要な数値 | 16.2:1 |
+| `--color-text-2` | `#c6c9e6` | 本文、最終メッセージ | 11.2:1 |
+| `--color-text-3` | `#9296bd` | メタ情報（時刻、サイズ、パス） | 6.4:1 |
+| `--color-text-muted` | `#5f6389` | 無効状態、プレースホルダ | 3.2:1（無効要素にのみ使う） |
 
 ### 2.3 シグナルとアクセント
 
 | トークン | 値 | 役割 |
 |---|---|---|
-| `--color-signal` | `#70dcd3` | **稼働中**。画面で唯一光る色。ドット、列ヘッダの下線、件数 |
-| `--color-signal-dim` | `#1f4a47` | 稼働中カードの左端バー、稼働中列ヘッダの背景 |
-| `--color-focus` | `#0092e4` | キーボードフォーカスリング、リンク。signal と同じ面に重ねない |
+| `--color-signal` | `#9d8cff` | **稼働中**。画面で唯一光る色（6.7:1）。ドット、列ヘッダの下線、件数 |
+| `--color-signal-dim` | `#2b2466` | Toggle ON の地。稼働中の面を淡く塗る必要が出たときの予備（カード左端バーと列ヘッダ下線は `--color-signal` そのもの） |
+| `--color-focus` | `#6ea8ff` | キーボードフォーカスリング、リンク（7.6:1）。signal と同じ面に重ねない |
 | `--color-working` | `#f2b950` | **作業中**（ログが更新され続けているが稼働プロセス未確認） |
-| `--color-danger` | `#ff6b6b` | エラー、読み取り失敗 |
-| `--color-on-signal` | `#070707` | signal 背景上の文字 |
+| `--color-danger` | `#ff6b7a` | エラー、読み取り失敗 |
+| `--color-on-signal` | `#0a0a1c` | signal / `--gradient-primary` 背景上の文字（単色 signal 上 7.1:1、グラデーション上は 5.4:1 以上） |
 
 ### 2.4 状態は色だけで区別しない
 
@@ -71,6 +72,21 @@
 
 ツール種別は色ではなく **輪郭ピルのラベル**（`Claude` / `Codex`）で示す。ツール種別に専用色を与えない。
 
+### 2.5 グラデーションと光彩（ADR-0008）
+
+rgba / hex を含む値はここ（と tokens.css）にだけ書く。CSS Modules は必ずトークン経由で参照する。
+
+| トークン | 役割 | 使う場所 |
+|---|---|---|
+| `--gradient-page` | ページ背景。左上に紫、右上に青の淡い放射グラデーションを藍の縦グラデーションに重ねる | `body` の `background-image`（`background` 自体は `--color-bg` のまま。`background-attachment: fixed` でスクロールしても光の位置を動かさない） |
+| `--gradient-surface` | カード / パネル / 指示入力欄の上端にごく薄い紫を乗せる | `SessionCard`、`DetailPanel`、`ComposeBox`、`AccountChip` の `background-image` |
+| `--gradient-primary` | 塗りつぶしボタン（`primary`）の背景 | `Button.primary`（文字は `--color-on-signal`） |
+| `--glow-signal` | 稼働中の要素の輪郭光彩（1px の縁 + 18px のぼかし） | 稼働中の `SessionCard`、稼働中の `AccountChip`、稼働ありの `ColumnHeader` |
+| `--glow-signal-dot` | 稼働中ドットの光彩 | `Dot[state=running]` |
+| `--glow-title` | ページタイトルの淡い光彩 | `Header .title` の `text-shadow` |
+
+光彩は **稼働中（running）にだけ** 付ける。作業中・停止・エラー・選択・ホバー・フォーカスには付けない。フォーカスは §7 のアウトラインのまま。
+
 ---
 
 ## 3. タイポグラフィ
@@ -81,8 +97,9 @@
 |---|---|---|
 | `--font-ui` | `"Segoe UI Variable Text", "Segoe UI", "Yu Gothic UI", system-ui, sans-serif` | 本文、UI 全般、日本語 |
 | `--font-mono` | `"Cascadia Mono", Consolas, "Courier New", monospace` | **用途限定**: 作業ディレクトリ、ブランチ名、ログサイズ、PID、時刻 |
+| `--font-display` | `Georgia, Cambria, "Yu Mincho", "Times New Roman", serif` | **ページタイトル「AI-Manager」だけ**（ADR-0008）。他の見出し・本文には使わない |
 
-等幅を使ってよいのは上記 5 種の値だけ。タイトルや最終メッセージに等幅を使わない。
+等幅を使ってよいのは上記 5 種の値だけ。タイトルや最終メッセージに等幅を使わない。書体は本文 1 種 + 等幅 1 種 + 表示用セリフ 1 種の計 3 種で、外部フォントは読み込まない。
 
 ### 3.1 スケール
 
@@ -92,7 +109,8 @@
 | `--text-sm` | 12px / 1.4 | 最終メッセージ、テーブル本文 |
 | `--text-md` | 13px / 1.45 | 基本サイズ。カードタイトル、フィルタ、入力欄 |
 | `--text-lg` | 15px / 1.4 | 列ヘッダ、パネル見出し |
-| `--text-xl` | 20px / 1.2 | ページタイトル |
+| `--text-xl` | 20px / 1.2 | パネルの大見出し（予備） |
+| `--text-2xl` | 28px / 1.1 | ページタイトル（`--font-display`、`--weight-regular`） |
 
 ### 3.2 ウェイトと字間
 
@@ -100,7 +118,7 @@
 |---|---|
 | `--weight-regular` | 400 |
 | `--weight-medium` | 500（カードタイトル、列ヘッダ） |
-| `--weight-semibold` | 600（ページタイトル、件数の数字） |
+| `--weight-semibold` | 600（件数の数字。ページタイトルはセリフ体のため `--weight-regular`） |
 | `--tracking-normal` | 0 |
 | `--tracking-wide` | 0.04em（ピル内のラベル。§6.3 の `Pill` は種別を問わず適用する） |
 
@@ -131,10 +149,12 @@
 
 すべての要素を同じ角丸のカードに切り分けない。列は角丸なし（`0`）でよい。カードとパネルだけ `--radius-md`。
 
-### 4.3 影
+### 4.3 影と光彩
 
-影は使わない。段差は surface の明度差と 1px の境界線で表す。
-例外はモーダル・ドロップダウンの `--shadow-overlay: 0 8px 24px rgba(0, 0, 0, 0.6)` のみ。
+装飾の影（カードの浮き上がり、ホバー時の影）は使わない。段差は surface の明度差と 1px の境界線で表す。
+例外は次の 2 つだけ（ADR-0008）:
+- モーダル・ドロップダウンの `--shadow-overlay`
+- **稼働中** の要素とページタイトルの光彩 `--glow-signal` / `--glow-signal-dot` / `--glow-title`（§2.5）。光彩は静的で、点滅・呼吸アニメーションを付けない
 
 ### 4.4 モーション
 
@@ -226,8 +246,8 @@
 ## 6. コンポーネント目録
 
 ### 6.1 セッションカード `SessionCard`
-- 背景 `--color-surface-2`、境界 `1px solid --color-border`、角丸 `--radius-md`、パディング `--space-3`。
-- 稼働中は左端に `3px` の `--color-signal` バー（`--card-accent-width: 3px`）。作業中は `--color-working`。停止は無し。
+- 背景 `--color-surface-2` に `--gradient-surface` を重ねる。境界 `1px solid --color-border`、角丸 `--radius-md`、パディング `--space-3`。
+- 稼働中は左端に `3px` の `--color-signal` バー（`--card-accent-width: 3px`）と `--glow-signal` の光彩。作業中は `--color-working` のバーのみ（光彩なし）。停止は無し。
 - 1 行目: ツールピル + 状態ドット + 相対時刻（右寄せ、`--text-xs`、`--color-text-3`）。
 - 2 行目: タイトル（`--text-md`、`--weight-medium`、1 行省略）。
 - 3 行目: 最終メッセージ（`--text-sm`、`--color-text-2`、2 行省略）。
@@ -236,7 +256,7 @@
 - フォーカス: `2px solid --color-focus` のアウトライン、オフセット `2px`。
 
 ### 6.2 列ヘッダ `ColumnHeader`
-- 背景 `--color-surface-1`、下線 `1px solid --color-border`。稼働セッションを含む列は下線を `2px solid --color-signal`。
+- 背景 `--color-surface-1`、下線 `1px solid --color-border`。稼働セッションを含む列は下線を `2px solid --color-signal` にし、`--glow-signal` の光彩を付ける。
 - 左: 状態ドット + グループ名（`--text-lg`、`--weight-medium`）。右: 件数（`--weight-semibold`、`--font-mono`）。稼働数がある場合は `1 稼働 / 40` の形式。
 - `position: sticky; top: 0` で列内スクロール時も固定。
 
@@ -254,12 +274,13 @@
 - 幅 `32px`、高さ `18px`、角丸 `--radius-pill`。OFF: `--color-surface-3` 地 + `--color-text-3` ノブ。ON: `--color-signal-dim` 地 + `--color-signal` ノブ。ラベルは必ず横に置く。
 
 ### 6.6 ボタン `Button`
-- `primary`: 背景 `--color-text`、文字 `--color-bg`、`--radius-sm`、高さ `--control-height`。画面に 1 つまで（「送る」）。無効時は背景 `--color-surface-3`、文字 `--color-text-muted`、カーソル `not-allowed`、隣に理由を表示。
+- `primary`: 背景 `--gradient-primary`、文字 `--color-on-signal`、`--radius-sm`、高さ `--control-height`。画面に 1 つまで（「送る」）。無効時は背景 `--color-surface-3`、文字 `--color-text-muted`、カーソル `not-allowed`、隣に理由を表示。
 - `ghost`: 背景なし、`1px solid --color-border-strong`、文字 `--color-text-2`。「更新」「閉じる」に使う。「ボード / リスト」の表示切替は選択状態（`aria-pressed`）を伝える必要があるため §6.4 と同じ `Pill.filter` のセグメントにする。
 
 ### 6.7 アカウントチップ `AccountChip`
 - `--color-surface-2` 地、`1px solid --color-border`、`--radius-md`、パディング `--space-2 --space-3`。
 - 状態ドット + 表示名（`--weight-medium`） + 「稼働中 22:11〜」または「停止」（`--text-xs`、`--color-text-3`、時刻は `--font-mono`）。
+- 稼働中のチップは `--glow-signal` の光彩を付け、`--gradient-surface` を重ねる。
 
 ### 6.8 空状態 `EmptyState`
 - 列内または一覧全体の中央。`--color-text-3`、`--text-sm`。文言は「このグループにセッションはありません」「条件に合うセッションがありません。絞り込みを解除してください」のように **次の行動** を含める。
@@ -278,7 +299,7 @@
 - 本文テキストは対 surface で **4.5:1 以上**（§2.2 の表を満たす）。`--color-text-muted` は無効要素にのみ使う。
 - すべての操作はキーボードで可能。ボードでは `←` `→` で列間、`↑` `↓` でカード間、`Enter` で詳細、`Esc` で閉じる。
 - フォーカスリングは `2px solid --color-focus`、オフセット `2px`。`:focus-visible` でのみ表示。
-- 状態は色 + 形 + ラベル（§2.4）。ドットには `aria-label` を付ける。
+- 状態は色 + 形 + ラベル（§2.4）。ドットには `aria-label` を付ける。光彩は補助であり、光彩の有無だけで状態を伝えない。
 - `prefers-reduced-motion: reduce` で全モーションを 0ms にする。
 - ライトテーマは提供しない（管制画面として黒を固定）。`color-scheme: dark` を宣言し、フォーム部品も暗色にする。
 
@@ -302,27 +323,38 @@
 :root {
   color-scheme: dark;
 
-  --color-bg: #070707;
-  --color-surface-1: #0d0e12;
-  --color-surface-2: #141418;
-  --color-surface-3: #1c1d24;
-  --color-border: #22222a;
-  --color-border-strong: #3a3c46;
+  --color-bg: #06060f;
+  --color-surface-1: #0b0b1c;
+  --color-surface-2: #12122b;
+  --color-surface-3: #1a1a3c;
+  --color-border: #2a2a60;
+  --color-border-strong: #3b3b78;
 
-  --color-text: #f0f0f0;
-  --color-text-2: #c8cad0;
-  --color-text-3: #8f919b;
-  --color-text-muted: #60606c;
+  --color-text: #eef0ff;
+  --color-text-2: #c6c9e6;
+  --color-text-3: #9296bd;
+  --color-text-muted: #5f6389;
 
-  --color-signal: #70dcd3;
-  --color-signal-dim: #1f4a47;
-  --color-focus: #0092e4;
+  --color-signal: #9d8cff;
+  --color-signal-dim: #2b2466;
+  --color-focus: #6ea8ff;
   --color-working: #f2b950;
-  --color-danger: #ff6b6b;
-  --color-on-signal: #070707;
+  --color-danger: #ff6b7a;
+  --color-on-signal: #0a0a1c;
+
+  --gradient-page:
+    radial-gradient(ellipse 70% 45% at 15% 0%, rgba(124, 92, 255, 0.32), transparent 70%),
+    radial-gradient(ellipse 50% 35% at 90% 10%, rgba(58, 108, 255, 0.2), transparent 70%),
+    linear-gradient(180deg, #08081a 0%, #06060f 100%);
+  --gradient-surface: linear-gradient(180deg, rgba(124, 92, 255, 0.07), rgba(124, 92, 255, 0) 60%);
+  --gradient-primary: linear-gradient(135deg, #8f7dff 0%, #5b7cff 100%);
+  --glow-signal: 0 0 0 1px rgba(157, 140, 255, 0.35), 0 0 18px rgba(124, 92, 255, 0.25);
+  --glow-signal-dot: 0 0 8px rgba(157, 140, 255, 0.8);
+  --glow-title: 0 0 24px rgba(157, 140, 255, 0.35);
 
   --font-ui: "Segoe UI Variable Text", "Segoe UI", "Yu Gothic UI", system-ui, sans-serif;
   --font-mono: "Cascadia Mono", Consolas, "Courier New", monospace;
+  --font-display: Georgia, Cambria, "Yu Mincho", "Times New Roman", serif;
 
   --text-xs: 11px;
   --leading-xs: 1.3;
@@ -334,6 +366,8 @@
   --leading-lg: 1.4;
   --text-xl: 20px;
   --leading-xl: 1.2;
+  --text-2xl: 28px;
+  --leading-2xl: 1.1;
 
   --weight-regular: 400;
   --weight-medium: 500;

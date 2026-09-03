@@ -26,10 +26,13 @@
 
 .title {
   margin: 0;
-  font-size: var(--text-xl);
-  line-height: var(--leading-xl);
-  font-weight: var(--weight-semibold);
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  line-height: var(--leading-2xl);
+  font-weight: var(--weight-regular);
+  letter-spacing: var(--tracking-normal);
   color: var(--color-text);
+  text-shadow: var(--glow-title);
 }
 
 .clock {
