@@ -193,7 +193,8 @@ export function createSessionStore(deps: SessionStoreDeps) {
       select: (key) => set({ selectedKey: key }),
       setReadOnly: (readOnly) => set({ readOnly }),
       setLive: (live) => set((state) => ({ status: { ...state.status, live } })),
-      resetFilters: () => set({ filters: DEFAULT_FILTERS }),
+      // 既定値のままでも新しい参照にして、selector 購読が変化を検知できるようにする
+      resetFilters: () => set({ filters: { ...DEFAULT_FILTERS } }),
     };
   });
 }

@@ -1,0 +1,13 @@
+/*
+ * 読み取り専用トグル。OFF 時の注記はトグルの右隣に置く（DESIGN.md §6.4）。
+ */
+.wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.notice {
+  font-size: var(--text-xs);
+  color: var(--color-text-3);
+}

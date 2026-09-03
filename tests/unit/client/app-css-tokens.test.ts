@@ -57,10 +57,30 @@ function stripVarAndCalc(css: string): string {
 const tokensCssText = readText(TOKENS_CSS_PATH);
 const tokenNames = extractCustomPropertyNames(tokensCssText);
 
+/**
+ * 仮想スクロールなどの動的な位置・高さを、インラインの style からではなく CSS 変数経由で渡すための名前
+ * （CLAUDE.md §5「動的な幅・高さを CSS 変数で渡す場合のみ可」）。値は JS が実測値から与えるため
+ * tokens.css には無い。ここに列挙した名前だけを未定義扱いから除外する。
+ */
+const DYNAMIC_LAYOUT_VARS: ReadonlySet<string> = new Set([
+  "--virtual-offset",
+  "--virtual-total-size",
+  "--list-body-height",
+]);
+
 const moduleCssFiles = [
   ...listModuleCssFilesRecursive(APP_DIR),
   ...listModuleCssFilesRecursive(FEATURES_DIR),
 ];
+
+/** 走査対象の CSS Modules 内で宣言されているカスタムプロパティ名（feature ローカルの変数）。 */
+const moduleCssDeclaredNames = new Set<string>();
+for (const file of moduleCssFiles) {
+  const withoutComments = readText(file).replace(/\/\*[\s\S]*?\*\//g, "");
+  for (const name of extractCustomPropertyNames(withoutComments)) {
+    moduleCssDeclaredNames.add(name);
+  }
+}
 
 describe("src/client/app/*.module.css と src/client/features/**/*.module.css がトークン以外の値を含まない（DESIGN.md §5）", () => {
   it("走査対象の .module.css ファイルが 1 件以上ある（前提確認）", () => {
@@ -111,8 +131,15 @@ describe("src/client/app/*.module.css と src/client/features/**/*.module.css �
     const content = readText(file);
     const withoutComments = content.replace(/\/\*[\s\S]*?\*\//g, "");
     const varNames = [...withoutComments.matchAll(/var\((--[\w-]+)/g)].map((m) => m[1]);
+    // 走査対象の CSS Modules 内で宣言したカスタムプロパティ（値はトークンで組み立てる。feature 内で
+    // 親要素に宣言して子要素から参照する形を含む）と、動的レイアウト用の変数は許容する
+    const localNames = moduleCssDeclaredNames;
     const undefinedNames = varNames.filter(
-      (name) => typeof name === "string" && !tokenNames.has(name),
+      (name) =>
+        typeof name === "string" &&
+        !tokenNames.has(name) &&
+        !localNames.has(name) &&
+        !DYNAMIC_LAYOUT_VARS.has(name),
     );
     expect(undefinedNames, `未定義の var 参照: ${undefinedNames.join(", ")}`).toEqual([]);
   });
