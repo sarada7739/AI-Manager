@@ -1,0 +1,80 @@
+/*
+ * リスト表示のグリッド。仮想化と role="grid" を両立させるため <table> ではなく
+ * div + role 属性で組む（TASKS T-024 の設計判断。transform を使う仮想化はネイティブ
+ * <table> と相性が悪いため）。
+ * 列幅（--list-columns）はこの .grid で 1 か所だけ定義し、ListRow 側はカスタム
+ * プロパティとして参照するだけにする（値の二重管理を避けるため。CSS カスタム
+ * プロパティは CSS Modules のクラス名スコープと無関係にカスケードする）。
+ * 幅の値は DESIGN.md にあるトークンの calc() のみで組み立てる（生の px は書かない）。
+ */
+.grid {
+  --list-columns: calc(var(--dot-size) + var(--space-4)) calc(var(--column-width) / 4) 1fr 2fr 1fr
+    calc(var(--column-width) / 4) calc(var(--column-width) / 4) calc(var(--column-width) / 3);
+  position: relative;
+  height: 100%;
+  overflow-y: auto;
+  background: var(--color-surface-1);
+}
+
+.headerGroup {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.headerRow {
+  display: grid;
+  grid-template-columns: var(--list-columns);
+  background: var(--color-surface-1);
+  border-bottom: 1px solid var(--color-border);
+  /* ListRow.module.css の .row と同じ太さの透明な左枠を付け、選択行の左端バーの有無に
+     関わらずヘッダと本文の列の起点（左端）を揃える（レビュー指摘）。 */
+  border-left: var(--card-accent-width) solid transparent;
+}
+
+.columnHeader {
+  display: flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  overflow: hidden;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-2);
+  white-space: nowrap;
+}
+
+.headerButton {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.headerButton:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.sortArrow {
+  font-size: var(--text-xs);
+  color: var(--color-text-3);
+}
+
+.bodyGroup {
+  position: relative;
+  /* virtualizer.getTotalSize() を渡す（行数に応じて変わる動的な高さのため CSS 変数経由。
+     CLAUDE.md §5「動的な幅・高さを CSS 変数で渡す場合のみ可」に該当）。 */
+  height: var(--list-body-height);
+}
+
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}

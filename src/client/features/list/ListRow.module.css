@@ -1,0 +1,65 @@
+/*
+ * リストの 1 行（role="row"）。仮想化のため absolute + transform(translateY) で
+ * 位置決めする。--list-columns は ListView.module.css の .grid で定義したものを
+ * カスタムプロパティとして参照する（値の二重管理を避けるため）。
+ */
+.row {
+  display: grid;
+  grid-template-columns: var(--list-columns);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: var(--row-height);
+  /* virtualizer が計算した行位置（px）。行ごとに異なる動的な値のため CSS 変数経由
+     （CLAUDE.md §5 の例外規定に該当）。 */
+  transform: translateY(var(--virtual-offset));
+  border-bottom: 1px solid var(--color-border);
+  /* 選択時に左端バーが付いても幅が変わらないよう、非選択時は透明な同じ太さの枠を確保しておく。 */
+  border-left: var(--card-accent-width) solid transparent;
+  cursor: pointer;
+}
+
+.row:hover {
+  background: var(--color-surface-3);
+}
+
+.row.selected {
+  /* ホバーと見分けられるよう、背景（ホバーと同じ surface-3）に加えて左端にバーを付ける
+     （レビュー指摘）。カードの稼働中アクセント（DESIGN.md §6.1）と同じ太さのバーを流用する。 */
+  background: var(--color-surface-3);
+  border-left-color: var(--color-border-strong);
+}
+
+.row:focus-visible {
+  outline: 2px solid var(--color-focus);
+  /* 行はスクロール領域内で隣接する行と接しており、外向き（正のoffset）だと隣の行や
+     スクロール領域の端でアウトラインが見切れるため、内側に描くよう負の offset にする
+     （レビュー指摘）。 */
+  outline-offset: -2px;
+}
+
+.cell {
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-3);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+}
+
+.stateCell {
+  padding: 0 var(--space-2);
+}
+
+.lastMessage {
+  color: var(--color-text-2);
+}
+
+.meta {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-3);
+}
