@@ -84,7 +84,7 @@ tests/
   fixtures/                     合成データ。claude/ codex/ の JSONL と sessions json
   unit/                         shared/, server/sources/ の単体テスト
   integration/                  server/routes の統合テスト（一時ディレクトリにフィクスチャを展開）
-e2e/                            Playwright（ボード表示、リスト切替、絞り込み、詳細パネル）
+e2e/                            Playwright（ボード表示、リスト切替、絞り込み、詳細パネル、指示送信 [モック]）
 ```
 
 ### 2.1 境界のルール
@@ -223,9 +223,11 @@ useSessionStore
 - `server/sources/**`: 単体。`tests/fixtures/` を一時ディレクトリに展開し、`roots` を差し替えて実行。`os.homedir()` に依存しない。
 - `server/routes/**`: 統合。Hono の `app.request()` で実 HTTP を立てずに検証。
 - `client/**`: コンポーネント単体（Vitest + Testing Library）。グルーピング・フィルタは `shared` 側でテストするので UI 側は表示の検証に絞る。
-- E2E（Playwright）: フィクスチャを読むサーバを起動し、ボード表示 → リスト切替 → 絞り込み → 詳細パネルの 1 導線。
+- E2E（Playwright）: フィクスチャを読むサーバを起動し、ボード表示 → リスト切替 → 絞り込み → 詳細パネルの 1 導線を検証する。指示送信（T-033）は実セッションが必要なため、`page.route` で API 応答をモックした別 spec で検証する。
 
-## 9. 第 2 段階（F-7）に向けた拡張点
+## 9. 第 2 段階（F-7）実装済み
 
-- `server/routes/message.ts`（T-031 で実装）。`readOnly` の判定はクライアント側（`ComposeBox` の有効化）で行い、サーバ側は ADR-0009 で承認された送信経路（`sources/claude/messaging.ts`）のみを使う。
-- `client/features/compose/` は UI だけ先に置き、`disabled` と理由文言を持つ（T-032 で有効化・確認ダイアログを追加予定）。
+- `server/routes/message.ts`（T-031）: `POST /api/sessions/:tool/:id/message`。Claude の稼働中セッション宛のみを受け付け、Codex は 400 `unsupported_tool` を返す（§5 参照）。`readOnly` の判定はクライアント側（`ComposeBox` の有効化）で行い、サーバ側は ADR-0009 で承認された送信経路（`sources/claude/messaging.ts`。`.key` → 名前付きパイプ経由、§7 参照）のみを使う。
+- `client/features/compose/`（T-032）: `ComposeBox` は読み取り専用トグル OFF + 送信前確認ダイアログ（`role="dialog"`、`components/Dialog.tsx`）の 2 段階を経てからだけ `sendMessage` を呼ぶ。宛先は稼働中の Claude セッションのみ（`store/selectors.ts` の `selectRunningClaudeSessions`）。
+- E2E（T-033、`e2e/compose-send.spec.ts`）: 実セッションが必要な導線のため、`page.route` でクライアントの API 応答をモックして検証する。実 API を実セッションへ送信することはしない。
+- Codex 宛の送信（`codex queue`、ADR-0009 の選択肢 E）は第 2 段階の範囲外で未実装。宛先セレクトに Codex は出ない。
