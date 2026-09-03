@@ -1,0 +1,26 @@
+/*
+ * ページ骨格のレイアウト。トークン経由のみ（CLAUDE.md §5 / DESIGN.md §9）。
+ */
+.layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.compose,
+.accounts,
+.filters {
+  padding: 0 var(--space-5);
+}
+
+.main {
+  flex: 1;
+  padding: 0 var(--space-5);
+  margin-top: var(--space-6);
+}

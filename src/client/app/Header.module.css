@@ -1,0 +1,69 @@
+/*
+ * ヘッダ帯。surface-1 地 + 下線 1px（DESIGN.md §5.1）。トークン経由のみ。
+ */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  background: var(--color-surface-1);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-xl);
+  line-height: var(--leading-xl);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+.clock {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  color: var(--color-text-3);
+  white-space: nowrap;
+}
+
+.counts {
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  color: var(--color-text-2);
+  white-space: nowrap;
+}
+
+.count {
+  font-weight: var(--weight-semibold);
+}
+
+.slash {
+  padding: 0 var(--space-1);
+}
+
+.segment {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.updating {
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  color: var(--color-text-3);
+  white-space: nowrap;
+}
