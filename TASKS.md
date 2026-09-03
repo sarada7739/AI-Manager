@@ -1,9 +1,9 @@
 # TASKS.md — タスク台帳（進捗の唯一の真実）
 
 ## 進捗サマリ
-- 全 26 件 / 完了 16 件 / 進行中 0 件 / 未着手 10 件
-- 現在のタスク: T-014 / T-015 / T-019（並列可。T-013 完了により依存が解消）
-- 最終更新: 2026-09-03T08:50:00+09:00
+- 全 26 件 / 完了 17 件 / 進行中 5 件 / 未着手 4 件
+- 現在のタスク: T-015（第 2 段階の配線）/ T-019（Round 2）/ T-020 / T-021 / T-022（レビュー中）
+- 最終更新: 2026-09-03T12:25:00+09:00
 
 ## フェーズ進捗
 
@@ -34,15 +34,15 @@
 | T-011 | Codex rollout の探索と解析 | T-007, T-006 | done | 2 | #15 |
 | T-012 | セッション索引とアカウント合成 | T-009, T-010, T-011 | done | 2 | #18 |
 | T-013 | Hono API: sessions / accounts / health | T-012 | done | 1 | #19 |
-| T-014 | セッション詳細 API とメッセージ抽出 | T-003, T-013 | todo | 0 | - |
-| T-015 | ファイル監視・ポーリング・SSE・refresh | T-013 | todo | 0 | - |
+| T-014 | セッション詳細 API とメッセージ抽出 | T-003, T-013 | done | 1 | #20 |
+| T-015 | ファイル監視・ポーリング・SSE・refresh | T-013 | in_progress | 1 | - |
 | T-016 | デザイントークンとグローバルスタイル | T-001 | done | 1 | #9 |
 | T-017 | 汎用 UI コンポーネント | T-016 | done | 1 | #14 |
 | T-018 | グルーピング・絞り込み・並べ替えの純粋関数 | T-002, T-005 | done | 3 | #11 |
-| T-019 | クライアント基盤（API クライアント / ストア / URL 同期） | T-013, T-018 | todo | 0 | - |
-| T-020 | App シェルとヘッダ帯 | T-017, T-019 | todo | 0 | - |
-| T-021 | フィルタバーと読み取り専用トグル | T-020 | todo | 0 | - |
-| T-022 | アカウント帯 | T-020 | todo | 0 | - |
+| T-019 | クライアント基盤（API クライアント / ストア / URL 同期） | T-013, T-018 | in_progress | 2 | - |
+| T-020 | App シェルとヘッダ帯 | T-017, T-019 | review | 1 | - |
+| T-021 | フィルタバーと読み取り専用トグル | T-020 | review | 1 | - |
+| T-022 | アカウント帯 | T-020 | review | 1 | - |
 | T-023 | ボード表示（列・カード・仮想スクロール） | T-021 | todo | 0 | - |
 | T-024 | リスト表示（テーブル・並べ替え・仮想スクロール） | T-021 | todo | 0 | - |
 | T-025 | 詳細パネル・指示入力欄（無効）・自動更新・キーボード操作 | T-014, T-015, T-023, T-024 | todo | 0 | - |
@@ -221,13 +221,14 @@
 ### T-014 セッション詳細 API とメッセージ抽出
 - **目的**: 詳細パネル用に最近のメッセージを返す
 - **受け入れ条件**:
-  - [ ] `GET /api/sessions/:tool/:id` が `SessionDetail` を返す。`tool` は `claude|codex`、`id` は UUID / threadId 形式のみ受け付け、それ以外は 400
-  - [ ] 索引に無い id は 404。**パラメータからパスを組み立てない**（索引の `jsonlPath` を使う）
-  - [ ] 末尾 256KB から `user` / `assistant` を最大 20 件、時系列順で返す。各 `text` はマスク済み・先頭 500 文字
-  - [ ] `parseWarnings` に捨てた行数を入れる
-  - [ ] Codex は `response_item(message)` と `event_msg.user_message` から同様に抽出
+  - [x] `GET /api/sessions/:tool/:id` が `SessionDetail` を返す。`tool` は `claude|codex`、`id` は UUID / threadId 形式のみ受け付け、それ以外は 400
+  - [x] 索引に無い id は 404。**パラメータからパスを組み立てない**（索引の `jsonlPath` を使う）
+  - [x] 末尾 256KB から `user` / `assistant` を最大 20 件、時系列順で返す。各 `text` はマスク済み・先頭 500 文字
+  - [x] `parseWarnings` に捨てた行数を入れる
+  - [x] Codex は `response_item(message)` と `event_msg.user_message` から同様に抽出
 - **参照**: ARCHITECTURE.md §4.3, §5 / T-003
 - **触ってよい範囲**: `src/server/sources/claude/detail.ts`, `src/server/sources/codex/detail.ts`, `src/server/routes/sessions.ts`
+- **T-014 レビューからの引き継ぎ（T-015 / T-025 / Phase 4）**: `routes/sessions.ts` が `sources/*/detail.ts` を既定 import している（ARCHITECTURE §2.1 の字面に反する）。T-015 の配線で `index.ts` から `AppDeps.readClaudeDetail` / `readCodexDetail` に実物を注入し、route の既定 import を消して必須にする。detail の定数・切り詰め（`finalizeDetailText` / `truncateEnd` / `truncateStart`）は 3 か所で重複しているので `shared/format.ts` へ集約する候補。Codex は `user_message` と `response_item(user)` で同じ本文が 2 件並ぶ可能性がある（T-025 で実データ確認）。`parseWarnings` の文言には「次にどうするか」が無いので詳細パネルで補足を添える。ARCHITECTURE §4.3 の「UUID v4」は実装（汎用 UUID）に合わせて直す（Phase 4）
 
 ### T-015 ファイル監視・ポーリング・SSE・refresh
 - **目的**: F-9 の自動更新をサーバ側で成立させる

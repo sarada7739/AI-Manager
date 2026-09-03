@@ -658,6 +658,15 @@ export class SessionIndex {
     return this.index.get(key)?.summary;
   }
 
+  /** 詳細取得（T-014）用に、指定 key のセッションが読むべき jsonlPath とツール種別を返す。 */
+  getSource(key: string): { tool: ToolKind; jsonlPath: string } | undefined {
+    const indexed = this.index.get(key);
+    if (indexed === undefined) {
+      return undefined;
+    }
+    return { tool: indexed.summary.tool, jsonlPath: indexed.jsonlPath };
+  }
+
   /** tool（claude → codex）→ label の順に並んだアカウント一覧。 */
   getAccounts(): Account[] {
     return computeAccounts(this.getAll(), this.config.accounts);

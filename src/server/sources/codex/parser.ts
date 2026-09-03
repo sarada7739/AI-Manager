@@ -7,7 +7,7 @@ import { asRecord, asString, isArray, isRecord, isString } from "../../../shared
 import type { Entrypoint } from "../../../shared/types.js";
 
 /** rollout 1 行分の共通形（`{ timestamp, type, payload }`）。 */
-interface CodexRecord {
+export interface CodexRecord {
   timestamp: string;
   type: string;
   payload: Record<string, unknown>;
@@ -89,7 +89,7 @@ export function parseCodexSummary(
 }
 
 /** 1 行を CodexRecord にパースする。失敗（JSON 不正・形不一致）は null。 */
-function parseLine(raw: string): CodexRecord | null {
+export function parseLine(raw: string): CodexRecord | null {
   let json: unknown;
   try {
     json = JSON.parse(raw);
@@ -236,7 +236,7 @@ function findLastMessage(records: readonly CodexRecord[]): LastMessage | null {
 const TEXT_CONTENT_TYPES = new Set(["input_text", "output_text"]);
 
 /** response_item.payload.content（文字列 or `{ type, text }` 配列）から本文を取り出す。 */
-function extractResponseText(payload: Record<string, unknown>): string | null {
+export function extractResponseText(payload: Record<string, unknown>): string | null {
   const content = payload.content;
   if (isString(content)) {
     return content.length > 0 ? content : null;

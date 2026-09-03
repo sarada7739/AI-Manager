@@ -8,7 +8,9 @@ import type { AppDeps } from "../../src/server/app";
 import { createApp } from "../../src/server/app";
 import type { AppConfig } from "../../src/server/config";
 import { createLogger } from "../../src/server/log";
-import type { Account, SessionSummary } from "../../src/shared/types";
+import type { Result } from "../../src/shared/result";
+import { err, ok } from "../../src/shared/result";
+import type { Account, RecentMessage, SessionSummary, ToolKind } from "../../src/shared/types";
 
 const HOME_DIR = "C:\\synthetic\\home";
 
@@ -69,11 +71,15 @@ function makeFakeIndex(options?: {
   warnings?: string[];
   processInfoAvailable?: boolean;
   throwOnGetAll?: boolean;
+  /** key → jsonlPath/tool。`getSource` の戻り値を差し替える（T-014）。 */
+  sources?: Record<string, { tool: ToolKind; jsonlPath: string }>;
 }): AppDeps["index"] {
   const sessions = options?.sessions ?? [];
   const accounts = options?.accounts ?? [];
   const warnings = options?.warnings ?? [];
   const processInfoAvailable = options?.processInfoAvailable ?? false;
+  const sources = options?.sources ?? {};
+  const byKey = new Map(sessions.map((session) => [session.key, session]));
 
   return {
     getAll: () => {
@@ -84,10 +90,32 @@ function makeFakeIndex(options?: {
       }
       return sessions;
     },
+    get: (key: string) => byKey.get(key),
+    getSource: (key: string) => sources[key],
     getAccounts: () => accounts,
     getWarnings: () => warnings,
     isProcessInfoAvailable: () => processInfoAvailable,
   };
+}
+
+const SYNTHETIC_SESSION_ID = "00000000-0000-4000-8000-000000000001";
+const SYNTHETIC_JSONL_PATH = "C:\\synthetic\\secret.jsonl";
+
+/** readClaudeDetail / readCodexDetail のフェイク。呼び出し引数を記録する。 */
+function makeFakeReadDetail(
+  result: Result<{ recentMessages: RecentMessage[]; parseWarnings: string[] }>,
+): {
+  fn: (
+    jsonlPath: string,
+  ) => Promise<Result<{ recentMessages: RecentMessage[]; parseWarnings: string[] }>>;
+  calls: string[];
+} {
+  const calls: string[] = [];
+  const fn = async (jsonlPath: string) => {
+    calls.push(jsonlPath);
+    return result;
+  };
+  return { fn, calls };
 }
 
 function makeDeps(overrides?: Partial<AppDeps>): AppDeps {
@@ -148,6 +176,214 @@ describe("GET /api/sessions", () => {
     const body = await res.json();
 
     expect(body.sessions[0]).toEqual(session);
+  });
+});
+
+describe("GET /api/sessions/:tool/:id", () => {
+  it("索引にあるとき 200 で SessionDetail の形（summary の全フィールド + recentMessages + parseWarnings、summary は加工されない）になる", async () => {
+    const session = makeSession({
+      key: `claude:${SYNTHETIC_SESSION_ID}`,
+      id: SYNTHETIC_SESSION_ID,
+      title: "加工されないはずのタイトル",
+    });
+    const recentMessages: RecentMessage[] = [
+      { role: "user", at: "2026-01-01T00:00:00.000Z", text: "こんにちは" },
+    ];
+    const { fn: readClaudeDetail } = makeFakeReadDetail(ok({ recentMessages, parseWarnings: [] }));
+    const app = createApp(
+      makeDeps({
+        index: makeFakeIndex({
+          sessions: [session],
+          sources: {
+            [`claude:${SYNTHETIC_SESSION_ID}`]: { tool: "claude", jsonlPath: SYNTHETIC_JSONL_PATH },
+          },
+        }),
+        readClaudeDetail,
+      }),
+    );
+
+    const res = await app.request(`/api/sessions/claude/${SYNTHETIC_SESSION_ID}`);
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ ...session, recentMessages, parseWarnings: [] });
+  });
+
+  it("tool='gpt' は 400 で error.code が 'invalid_id'", async () => {
+    const app = createApp(makeDeps());
+
+    const res = await app.request(`/api/sessions/gpt/${SYNTHETIC_SESSION_ID}`);
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.code).toBe("invalid_id");
+  });
+
+  it("id='not-a-uuid' は 400 で error.code が 'invalid_id'", async () => {
+    const app = createApp(makeDeps());
+
+    const res = await app.request("/api/sessions/claude/not-a-uuid");
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.code).toBe("invalid_id");
+  });
+
+  it("大文字 UUID は小文字化した key で index.get / getSource が呼ばれ 200 になる", async () => {
+    const session = makeSession({
+      key: `claude:${SYNTHETIC_SESSION_ID}`,
+      id: SYNTHETIC_SESSION_ID,
+    });
+    const { fn: readClaudeDetail } = makeFakeReadDetail(
+      ok({ recentMessages: [], parseWarnings: [] }),
+    );
+    const app = createApp(
+      makeDeps({
+        index: makeFakeIndex({
+          sessions: [session],
+          sources: {
+            [`claude:${SYNTHETIC_SESSION_ID}`]: { tool: "claude", jsonlPath: SYNTHETIC_JSONL_PATH },
+          },
+        }),
+        readClaudeDetail,
+      }),
+    );
+
+    const res = await app.request(`/api/sessions/claude/${SYNTHETIC_SESSION_ID.toUpperCase()}`);
+
+    expect(res.status).toBe(200);
+  });
+
+  it("索引に無い id は 404 で error.code が 'not_found'、readClaudeDetail は呼ばれない", async () => {
+    const { fn: readClaudeDetail, calls } = makeFakeReadDetail(
+      ok({ recentMessages: [], parseWarnings: [] }),
+    );
+    const app = createApp(makeDeps({ index: makeFakeIndex({ sessions: [] }), readClaudeDetail }));
+
+    const res = await app.request(`/api/sessions/claude/${SYNTHETIC_SESSION_ID}`);
+
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.error.code).toBe("not_found");
+    expect(calls).toEqual([]);
+  });
+
+  it("getSource の jsonlPath がそのまま readClaudeDetail に渡る（パラメータから組み立てていない）", async () => {
+    const session = makeSession({
+      key: `claude:${SYNTHETIC_SESSION_ID}`,
+      id: SYNTHETIC_SESSION_ID,
+    });
+    const { fn: readClaudeDetail, calls } = makeFakeReadDetail(
+      ok({ recentMessages: [], parseWarnings: [] }),
+    );
+    const app = createApp(
+      makeDeps({
+        index: makeFakeIndex({
+          sessions: [session],
+          sources: {
+            [`claude:${SYNTHETIC_SESSION_ID}`]: { tool: "claude", jsonlPath: SYNTHETIC_JSONL_PATH },
+          },
+        }),
+        readClaudeDetail,
+      }),
+    );
+
+    await app.request(`/api/sessions/claude/${SYNTHETIC_SESSION_ID}`);
+
+    expect(calls).toEqual([SYNTHETIC_JSONL_PATH]);
+  });
+
+  it("codex の場合は readCodexDetail が呼ばれる（readClaudeDetail は呼ばれない）", async () => {
+    const session = makeSession({
+      key: `codex:${SYNTHETIC_SESSION_ID}`,
+      id: SYNTHETIC_SESSION_ID,
+      tool: "codex",
+    });
+    const { fn: readClaudeDetail, calls: claudeCalls } = makeFakeReadDetail(
+      ok({ recentMessages: [], parseWarnings: [] }),
+    );
+    const { fn: readCodexDetail, calls: codexCalls } = makeFakeReadDetail(
+      ok({ recentMessages: [], parseWarnings: [] }),
+    );
+    const app = createApp(
+      makeDeps({
+        index: makeFakeIndex({
+          sessions: [session],
+          sources: {
+            [`codex:${SYNTHETIC_SESSION_ID}`]: { tool: "codex", jsonlPath: SYNTHETIC_JSONL_PATH },
+          },
+        }),
+        readClaudeDetail,
+        readCodexDetail,
+      }),
+    );
+
+    const res = await app.request(`/api/sessions/codex/${SYNTHETIC_SESSION_ID}`);
+
+    expect(res.status).toBe(200);
+    expect(codexCalls).toEqual([SYNTHETIC_JSONL_PATH]);
+    expect(claudeCalls).toEqual([]);
+  });
+
+  it("readClaudeDetail が err（実パスを含むメッセージ）を返すとき、500 で応答本文とログにそのパスが含まれない", async () => {
+    const session = makeSession({
+      key: `claude:${SYNTHETIC_SESSION_ID}`,
+      id: SYNTHETIC_SESSION_ID,
+    });
+    const { fn: readClaudeDetail } = makeFakeReadDetail(
+      err({
+        code: "file_unreadable",
+        message: `ファイルを読み取れませんでした: ${SYNTHETIC_JSONL_PATH}`,
+        hint: "ファイルが存在し、読み取り権限があるか確認してください。",
+      }),
+    );
+    const { lines, sink } = makeSinkCollector();
+    const log = createLogger({ roots: [`${HOME_DIR}\\.claude`], homeDir: HOME_DIR, sink });
+    const app = createApp(
+      makeDeps({
+        index: makeFakeIndex({
+          sessions: [session],
+          sources: {
+            [`claude:${SYNTHETIC_SESSION_ID}`]: { tool: "claude", jsonlPath: SYNTHETIC_JSONL_PATH },
+          },
+        }),
+        readClaudeDetail,
+        log,
+      }),
+    );
+
+    const res = await app.request(`/api/sessions/claude/${SYNTHETIC_SESSION_ID}`);
+
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    const bodyText = JSON.stringify(body);
+    expect(bodyText).not.toContain(SYNTHETIC_JSONL_PATH);
+    expect(lines.join("\n")).not.toContain(SYNTHETIC_JSONL_PATH);
+  });
+
+  it("Cache-Control: no-store が付く", async () => {
+    const session = makeSession({
+      key: `claude:${SYNTHETIC_SESSION_ID}`,
+      id: SYNTHETIC_SESSION_ID,
+    });
+    const { fn: readClaudeDetail } = makeFakeReadDetail(
+      ok({ recentMessages: [], parseWarnings: [] }),
+    );
+    const app = createApp(
+      makeDeps({
+        index: makeFakeIndex({
+          sessions: [session],
+          sources: {
+            [`claude:${SYNTHETIC_SESSION_ID}`]: { tool: "claude", jsonlPath: SYNTHETIC_JSONL_PATH },
+          },
+        }),
+        readClaudeDetail,
+      }),
+    );
+
+    const res = await app.request(`/api/sessions/claude/${SYNTHETIC_SESSION_ID}`);
+
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
   });
 });
 
