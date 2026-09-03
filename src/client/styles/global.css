@@ -17,6 +17,8 @@ body {
 
 body {
   background: var(--color-bg);
+  background-image: var(--gradient-page);
+  background-attachment: fixed;
   color: var(--color-text);
   font-family: var(--font-ui);
   font-size: var(--text-md);

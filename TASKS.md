@@ -1,9 +1,9 @@
 # TASKS.md — タスク台帳（進捗の唯一の真実）
 
 ## 進捗サマリ
-- 全 29 件 / 完了 28 件 / 進行中 0 件 / 未着手 1 件
-- 現在のタスク: T-029（配色をインディゴ基調に変更。利用者提示の参考画像に合わせ、ADR-0008 で DESIGN.md を改訂してから implementer → tester → reviewer）
-- 最終更新: 2026-09-03T21:30:00+09:00
+- 全 29 件 / 完了 29 件 / 進行中 0 件 / 未着手 0 件
+- 現在のタスク: **すべて完了**（第 1 段階 read-only + 実機確認の修正 T-027 / T-028 + 配色変更 T-029。第 2 段階 F-7 は ADR 起票と人間の承認が前提）
+- 最終更新: 2026-09-03T22:00:00+09:00
 
 ## フェーズ進捗
 
@@ -49,7 +49,7 @@
 | T-026 | E2E と README | T-022, T-025 | done | 3 | #29 |
 | T-027 | 稼働メタの procStart が文字列でも読めるようにする | T-010 | done | 2 | #31 |
 | T-028 | 詳細パネルで直近メッセージが 0 件のときの案内表示 | T-025 | done | 2 | #31 |
-| T-029 | 配色をインディゴ基調に変更（光彩・グラデーション・見出し書体） | T-016 | todo | 0 | - |
+| T-029 | 配色をインディゴ基調に変更（光彩・グラデーション・見出し書体） | T-016 | done | 3 | #32 |
 
 依存グラフは DAG（循環なし）。実行順は ID 順で依存を満たす。
 
@@ -401,12 +401,12 @@
 ### T-029 配色をインディゴ基調に変更（光彩・グラデーション・見出し書体）
 - **目的**: 利用者から「添付画像のような色合いに変更してほしい。パネルの位置やレイアウトは変えなくてよく、フォント・色の光り方・グラデーションに着目してほしい」との指示。ADR-0008 で DESIGN.md §1 / §2 / §3 / §4.3 / §9 を改訂し、実装をそれに合わせる
 - **受け入れ条件**:
-  - [ ] `tokens.css` が DESIGN.md §9（改訂後）と完全一致する（`design-tokens.test.ts` が pass）
-  - [ ] ページ背景に `--gradient-page`、カード / パネルに `--gradient-surface` が適用される
-  - [ ] 稼働中のカード・列ヘッダ・ドット・アカウントチップに `--glow-signal` / `--glow-signal-dot` の光彩が付き、停止 / 作業中には付かない
-  - [ ] ページタイトル「AI-Manager」が `--font-display` / `--text-2xl` / `--glow-title` で描画される
-  - [ ] `primary` ボタンの背景が `--gradient-primary`、`Toggle` ON が `--color-signal` 系である
-  - [ ] CSS Modules に生の hex / px / rgba を書かない（光彩・グラデーションはトークン経由のみ）
-  - [ ] レイアウト・余白・角丸・状態の形とラベル・キーボード操作は変えない。既存テスト（1500 件超）と E2E が pass
+  - [x] `tokens.css` が DESIGN.md §9（改訂後）と完全一致する（`design-tokens.test.ts` が pass）
+  - [x] ページ背景に `--gradient-page`、カード / パネルに `--gradient-surface` が適用される
+  - [x] 稼働中のカード・列ヘッダ・ドット・アカウントチップに `--glow-signal` / `--glow-signal-dot` の光彩が付き、停止 / 作業中には付かない
+  - [x] ページタイトル「AI-Manager」が `--font-display` / `--text-2xl` / `--glow-title` で描画される
+  - [x] `primary` ボタンの背景が `--gradient-primary`、`Toggle` ON が `--color-signal` 系である
+  - [x] CSS Modules に生の hex / px / rgba を書かない（光彩・グラデーションはトークン経由のみ）
+  - [x] レイアウト・余白・角丸・状態の形とラベル・キーボード操作は変えない。既存テスト（1500 件超）と E2E が pass
 - **参照**: ADR-0008 / DESIGN.md §1, §2, §3, §4.3, §6, §9
 - **触ってよい範囲**: `src/client/styles/tokens.css`, `src/client/styles/global.css`, `src/client/**/*.module.css`（レイアウトに関わる宣言は変えない）、`tests/unit/client/**`（tester）。DESIGN.md / ADR はメインが先に更新する

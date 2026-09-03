@@ -11,6 +11,7 @@
 
 .running {
   background: var(--color-signal);
+  box-shadow: var(--glow-signal-dot);
 }
 
 .active {

@@ -24,8 +24,8 @@
 }
 
 .primary {
-  background: var(--color-text);
-  color: var(--color-bg);
+  background: var(--gradient-primary);
+  color: var(--color-on-signal);
 }
 
 .ghost {

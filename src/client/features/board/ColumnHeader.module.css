@@ -21,6 +21,7 @@
 
 .header[data-has-running="true"] {
   border-bottom: 2px solid var(--color-signal);
+  box-shadow: var(--glow-signal);
 }
 
 .left {
