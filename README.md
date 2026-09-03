@@ -141,6 +141,10 @@ node dist/server/index.js
   `http://localhost:5173` を開いてください。
 - **日本語パスが文字化けする**: 発生しません。ファイル読み取り・API 応答はすべて UTF-8 固定です。
 
+- **`pnpm e2e` が `browserType.launch: Executable doesn't exist` で失敗する**: ブラウザ本体が未取得です。`pnpm exec playwright install chromium` を一度実行してください。
+- **`pnpm e2e` を実行すると `local-data/e2e/` の中身が変わる**: 仕様です。E2E は利用者の `local-data/config.json` や実ログには触れず、`local-data/e2e/` の合成データを毎回削除・再生成し、環境変数 `AI_MANAGER_CONFIG_PATH` でその設定だけを読ませます。
+- **`pnpm e2e` が「ポートが使用中」で止まる**: 前回のサーバ（4317）や Vite（5173）が残っています。該当プロセスを終了してから再実行してください。
+
 ## 品質ゲート・テスト構成
 
 ```powershell
@@ -149,6 +153,6 @@ pnpm gate   # typecheck → lint → test → build を順に実行
 
 - **単体**（`pnpm test` / Vitest）: `src/shared/**`（純粋関数）、`src/server/sources/**`（合成フィクスチャ）
 - **統合**（`tests/integration/`）: `src/server/routes/**` を Hono の `app.request()` で検証
-- **E2E**（`pnpm e2e` / Playwright）: `e2e/setup/build-fixtures.mjs` が合成データを毎回作り直してから
+- **E2E**（`pnpm e2e` / Playwright）: `e2e/setup/build-fixtures.mjs` が `local-data/e2e/` に合成データを毎回削除・再生成してから
   サーバ・クライアントを起動し、主要導線（ボード表示 → リスト切替 → 絞り込み → 詳細パネル）を検証します。
   実行前に `pnpm exec playwright install chromium` が必要です。

@@ -31,12 +31,14 @@ src/
     grouping.ts                 グルーピング・フィルタ・並べ替え（純粋関数）
     time.ts                     相対時刻の整形
   server/
-    index.ts                    起動。設定読込 → 索引構築 → 監視開始 → Hono 起動
-    config.ts                   設定（roots, activeWindowMinutes, pollIntervalSec, accounts）の読込と既定値
+    index.ts                    起動。設定読込 → 索引構築 → イベントハブ / 監視開始 → Hono 起動。SIGINT で SSE を閉じて終了
+    app.ts                      createApp(deps): routes のマウント、CORS（localhost / 127.0.0.1 のみ）、no-store、エラー形式
+    errors.ts                   toApiError: AppError → ApiError（hint の既定文言）
+    config.ts                   設定（roots, activeWindowMinutes, pollIntervalSec, port, accounts）の読込と既定値。AI_MANAGER_CONFIG_PATH で設定パスを上書き
     log.ts                      ログ出力（本文・実パスを出さない）
     sources/
       claude/
-        locator.ts              projects/**/*.jsonl と sessions/*.json の列挙（stat のみ）
+        locator.ts              projects/<dir>/<sessionId>.jsonl と付随ファイルの列挙（stat / readdir のみ。sessions/*.json は running.ts）
         parser.ts               JSONL のヘッダ / テイル解析 → SessionSummary 断片
         detail.ts               詳細取得（末尾 N メッセージ。マスク適用）
         running.ts              sessions/<pid>.json の読込と検証
@@ -51,9 +53,10 @@ src/
         head.ts                 先頭 N 行の読み取り
         safe-path.ts            ルート配下であることの検証（パス走査防止）
     store/
-      index.ts                  SessionIndex: Map<sessionKey, SessionSummary>。集約、アカウント合成
-      watcher.ts                fs.watch（recursive）+ ポーリングのフォールバック。変更イベントを debounce
-      events.ts                 SSE 購読者への通知
+      index.ts                  SessionIndex: Map<sessionKey, IndexedSession>。集約、重複解消、アカウント合成、差分更新
+      build-summary.ts          1 セッション分の SessionSummary 組み立て（title / lastMessage の確定、マスク、切り詰め、状態導出）
+      watcher.ts                fs.watch（recursive）+ ポーリング常時併用。索引対象パスだけを 300ms debounce（上限 2 秒）で通知。node:fs は watch のみ使い、ファイルは開かない
+      events.ts                 SSE 購読者への通知（heartbeat 30 秒）、rebuild / refreshFiles を直列化する IndexGate、serialized refresh
     routes/
       sessions.ts               GET /api/sessions, GET /api/sessions/:tool/:id
       accounts.ts               GET /api/accounts
@@ -61,7 +64,7 @@ src/
       health.ts                 GET /api/health
   client/
     main.tsx                    エントリ
-    app/                        App.tsx, Layout, キーボードナビゲーション
+    app/                        App.tsx（全 feature の配線、URL 同期、自動更新）, Layout, Header。キーボード操作は各 feature（board / list の矢印キー、session-detail の Esc）が持つ
     features/
       board/                    BoardView, BoardColumn, SessionCard
       list/                     ListView, ListRow
@@ -71,7 +74,7 @@ src/
       compose/                  ComposeBox（第 1 段階は無効表示）
       refresh/                  RefreshButton, 自動更新（SSE 購読 + フォールバック）
     components/                 Pill, Toggle, Button, EmptyState, Loading, ErrorBanner, Dot
-    store/                      useSessionStore（Zustand）: sessions, accounts, filters, view, selection
+    store/                      useSessionStore（Zustand）: sessions, accounts, filters, view, selection / selectors（useMemo 用の純粋関数）/ url-sync / use-now-minute（分単位の nowMs）
     api/                        client.ts（fetch ラッパ、ApiError 変換）, sse.ts
     styles/                     tokens.css, global.css
 tests/
@@ -90,7 +93,7 @@ e2e/                            Playwright（ボード表示、リスト切替�
 | `server/routes` → `sources` | 禁止。routes は `store` だけを見る |
 | `server/store` → `sources` | 許可（唯一の呼び出し元） |
 | `client/features/A` → `client/features/B` | 禁止。共有は `components/` か `store/` に上げる |
-| ファイルパスの組み立て | `server/sources/**` と `server/config.ts` のみ |
+| ファイルパスの組み立て | `server/sources/**` と `server/config.ts` のみ。例外: `store/build-summary.ts` の `custom-title.json`（locator が返した既存パスへの `path.join`）と、`store/index.ts` / `store/watcher.ts` の「稼働メタ配下か」の文字列判定（ファイルは開かない） |
 | プロセス列挙 | `server/sources/process/list.ts` のみ |
 
 ## 3. データモデル（`src/shared/types.ts`）
@@ -158,23 +161,23 @@ interface Account {
 
 ### 4.3 詳細取得
 
-- `GET /api/sessions/:tool/:id` は `id` を厳密に検証する（Claude: UUID v4 形式、Codex: `[0-9a-f-]{36}`）。検証を通った id で索引を引き、索引に無ければ 404。**リクエストのパラメータからパスを組み立てない**。
+- `GET /api/sessions/:tool/:id` は `id` を厳密に検証する（Claude / Codex とも汎用の UUID 形式 `8-4-4-4-12` の 16 進。version nibble は見ない。locator の `CLAUDE_SESSION_ID_PATTERN` と同じ）。検証を通った id で索引を引き、索引に無ければ 404。**リクエストのパラメータからパスを組み立てない**。
 - 末尾 256KB を読み、`user` / `assistant` を最大 20 件、`masking.ts` でマスクして返す。
 
 ## 5. API
 
 | メソッド | パス | 応答 | 備考 |
 |---|---|---|---|
-| GET | `/api/health` | `{ ok, version, roots: string[], watcher: "fs" \| "poll" \| "both", processInfo: boolean }` | 実パスは `~` に置換 |
+| GET | `/api/health` | `{ ok, version, roots: string[], watcher: "fs" \| "poll" \| "both", processInfo: boolean, warnings: string[] }` | homeDir 配下の root は `~` に置換（配下でない root はそのまま。ローカル専用 API）。`warnings` は固定文言のみ。`watcher` は実装上 `both` / `poll` の 2 値 |
 | GET | `/api/sessions` | `{ sessions: SessionSummary[], generatedAt }` | フィルタはクライアント側 |
 | GET | `/api/sessions/:tool/:id` | `SessionDetail` | 404 / 400 |
 | GET | `/api/accounts` | `{ accounts: Account[] }` | |
-| GET | `/api/events` | SSE: `sessions-changed`, `heartbeat`（30 秒） | |
+| GET | `/api/events` | SSE: `sessions-changed`（`{ changed, at }`。`changed` は全走査時は走査件数）, `heartbeat`（30 秒）。接続直後に heartbeat を 1 回 | |
 | POST | `/api/refresh` | `{ ok, scanned, durationMs }` | 全走査を再実行 |
 
 エラー応答は `{ error: { code, message, hint } }`。`message` は「何が起きたか」、`hint` は「次にどうするか」。
 
-サーバは `127.0.0.1` にのみバインドする（既定ポート 4317）。CORS は Vite dev の `localhost` のみ許可。
+サーバは `127.0.0.1` にのみバインドする（既定ポート 4317）。CORS は `http://localhost[:port]` / `http://127.0.0.1[:port]` に厳密一致する origin のみ許可。Vite dev の `/api` プロキシは本表のパスだけを転送する（`src/client/api/` のモジュール要求と衝突させないため。API を足したら `vite.config.ts` も更新）。
 
 ## 6. クライアント状態（Zustand）
 
@@ -202,7 +205,8 @@ useSessionStore
 - 外部通信なし。フォント・スクリプトの CDN 読み込みもしない。
 - 秘密情報らしき文字列は `masking.ts` でマスクしてから API に載せる（UI ではなくサーバでマスク）。
 - ログ（`log.ts`）にセッション本文・実パスを出さない。パスはハッシュ化または `~` 置換で出す。
-- 子プロセスは `process/list.ts` の固定コマンド（引数なし）のみ。ユーザー入力を渡さない。
+- 子プロセスは `process/list.ts` の固定コマンド（固定引数の PowerShell 1 本。stdout は UTF-8 に固定）のみ。ユーザー入力を渡さない。
+- 設定パスの上書き `AI_MANAGER_CONFIG_PATH` はローカルの環境変数で、`config.json` と同じ信頼境界（外部入力からは組み立てない）。
 
 ## 8. テスト戦略
 

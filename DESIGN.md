@@ -102,7 +102,7 @@
 | `--weight-medium` | 500（カードタイトル、列ヘッダ） |
 | `--weight-semibold` | 600（ページタイトル、件数の数字） |
 | `--tracking-normal` | 0 |
-| `--tracking-wide` | 0.04em（ピル内の英字ラベルのみ） |
+| `--tracking-wide` | 0.04em（ピル内のラベル。§6.3 の `Pill` は種別を問わず適用する） |
 
 見出しの上に置く「トラッキングを広げた全大文字ラベル」は使わない。
 
@@ -184,7 +184,7 @@
 
 - ページ左右余白 `--space-5`。最大幅は設けない（ワイドモニタで列を増やす）。
 - 列幅 `--column-width: 300px`、列間 `--space-3`。横スクロール可。
-- ヘッダ帯とフィルタバーは `position: sticky`。
+- フィルタバーは `position: sticky`。ヘッダ帯も sticky にする想定だったが、第 1 段階ではヘッダ帯の高さのトークンが無く両者の `top` を両立できないため、ヘッダ帯は固定しない（ADR-0007。`--header-height` を追加した時点で両立させる）。
 
 ### 5.2 リスト表示
 
@@ -255,7 +255,7 @@
 
 ### 6.6 ボタン `Button`
 - `primary`: 背景 `--color-text`、文字 `--color-bg`、`--radius-sm`、高さ `--control-height`。画面に 1 つまで（「送る」）。無効時は背景 `--color-surface-3`、文字 `--color-text-muted`、カーソル `not-allowed`、隣に理由を表示。
-- `ghost`: 背景なし、`1px solid --color-border-strong`、文字 `--color-text-2`。「更新」「ボード / リスト」に使う。
+- `ghost`: 背景なし、`1px solid --color-border-strong`、文字 `--color-text-2`。「更新」「閉じる」に使う。「ボード / リスト」の表示切替は選択状態（`aria-pressed`）を伝える必要があるため §6.4 と同じ `Pill.filter` のセグメントにする。
 
 ### 6.7 アカウントチップ `AccountChip`
 - `--color-surface-2` 地、`1px solid --color-border`、`--radius-md`、パディング `--space-2 --space-3`。
