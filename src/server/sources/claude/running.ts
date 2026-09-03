@@ -49,6 +49,18 @@ function isEnoent(error: unknown): boolean {
   return isRecord(error) && error.code === "ENOENT";
 }
 
+/** FILETIME 値（数値、または数字だけの文字列）を number に変換する。それ以外は undefined。 */
+function parseFileTime(raw: unknown): number | undefined {
+  if (typeof raw === "number") {
+    return Number.isFinite(raw) ? raw : undefined;
+  }
+  if (typeof raw === "string" && /^[0-9]+$/.test(raw)) {
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
 /** `entrypoint` の値を検証する。`"cli"` / `"claude-desktop"` 以外・欠落は `"unknown"`。 */
 function parseEntrypoint(value: string | undefined): Entrypoint {
   return value === "cli" || value === "claude-desktop" ? value : "unknown";
@@ -88,7 +100,9 @@ function parseRunningMeta(value: unknown, filePid: number): RunningMeta | undefi
     return undefined;
   }
 
-  const procStart = asNumber(value, "procStart");
+  // procStart（Windows FILETIME）は 2^53 を超えるため、実機では数値ではなく数字の文字列で書かれる
+  // （docs/RESEARCH.md §2.2 の追記）。数値・数字文字列のどちらも受け付け、それ以外は不正とする
+  const procStart = parseFileTime(value.procStart);
   if (procStart === undefined) {
     return undefined;
   }
@@ -143,7 +157,7 @@ async function readOneMeta(fullPath: string, filePid: number): Promise<RunningMe
  *   シンボリックリンクは多くの場合 `readdir` の `Dirent.isFile()` が false を返す段階で
  *   除外されるが、これは環境依存で完全な保証ではない。最終的な安全性は `parseRunningMeta` の
  *   スキーマ検証（pid が正整数であること、ファイル名の `<pid>` と JSON 内の `pid` が一致すること、
- *   `sessionId` が UUID 形式であること、`procStart` が数値として存在すること）が担保する。
+ *   `sessionId` が UUID 形式であること、`procStart` が数値または数字文字列として存在すること）が担保する。
  *   検証を通らないものは不正として捨てるため、リンク先が想定外の内容でも誤って採用されない。
  */
 export async function readRunningMeta(root: string): Promise<ReadRunningMetaResult> {

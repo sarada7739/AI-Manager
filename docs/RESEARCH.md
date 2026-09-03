@@ -84,7 +84,7 @@ harness.md §1.2 / §2.3 の前提と食い違う点は無い（§9.2-4 に該�
   "sessionId": "<uuid>",               // projects/<dir>/<sessionId>.jsonl に対応
   "cwd": "C:\\Users\\<user>\\<project>",
   "startedAt": 1788354711380,          // epoch ms
-  "procStart": 134328283107540222,     // Windows FILETIME。PID 再利用の検出に使える
+  "procStart": "134328283107540222",   // Windows FILETIME。PID 再利用の検出に使える。2026-09-03 の実機では 2^53 を超えるため **数字の文字列** で書かれている（Phase 0 の記録では数値。数値・文字列の両方を受け付ける）
   "version": "2.1.255",
   "peerProtocol": 1,
   "peerFeatures": ["notify_idle", "artifact_yield"],

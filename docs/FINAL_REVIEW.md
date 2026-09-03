@@ -15,6 +15,17 @@
 | 4 | セキュリティ | grep と各 PR のレビュー結果を再確認 | §3 のとおり問題なし |
 | 5 | 構造的な問題（責務の重複、TODO、デッドコード） | grep（TODO / FIXME / console / any / 境界違反 / innerHTML）と PR の NON_BLOCKING の棚卸し | TODO / console / any / 境界違反 / innerHTML は 0 件。改善候補は §4（任意） |
 
+### 1.1 実機確認で発覚した修正（PR #31、2026-09-03 追記）
+
+Phase 4 完了後に `pnpm dev` で実ログを読ませたところ、E2E（合成フィクスチャ）では見えなかった 2 件が見つかった。TASKS.md に T-027 / T-028 として起票し、通常のループ（implementer → tester → reviewer）で修正した。
+
+| # | 事象 | 原因 | 対応 |
+|---|---|---|---|
+| 1 | ヘッダ帯が「0 稼働」、`/api/health` に「稼働メタ 4 件が不正」 | 実機の `sessions/<pid>.json` は `procStart`（Windows FILETIME）が 2^53 を超えるため **数字の文字列** で書かれており、Phase 0 の記録（数値）と食い違っていた。型ガードが数値のみを受け付けていた | T-027: `parseFileTime` で数値・数字文字列の両方を受け付け、それ以外は不正として警告に数える。RESEARCH.md §2.2 に実機の形を追記 |
+| 2 | ツール実行が続いているセッションの詳細パネルが「最近のメッセージ」見出しだけで空 | 末尾 256KB に user / assistant の行が無いと `recentMessages` が 0 件になるが、案内が無かった | T-028: 取得成功かつ 0 件のときだけ「何が起きたか + 次にどうするか」の案内を表示（DESIGN.md §8） |
+
+教訓: 合成フィクスチャは Phase 0 の記録から作るため、記録が実機とずれていると E2E では検出できない。RESEARCH.md のスキーマ記述は「実機のファイルをそのまま型ガードに通す」テストで裏取りするのが望ましい（改善候補として §4 に追加）。
+
 ## 2. 文書と実装の乖離（本 PR で修正）
 
 | # | 文書 | 乖離 | 対応 |
@@ -49,11 +60,12 @@ CLAUDE.md と AGENTS.md は Phase 1 以降変更しておらず、規約と実�
 - トークン: `--header-height`（ADR-0007）、`--z-*`、`--list-col-*`。`DESIGN.md` §9 と `tokens.css` を同時更新
 - UX: `~` 置換（クライアントが homeDir を知らない。`/api/health` から配布）、`LiveStatus` の読み上げ頻度、ランドマークの入れ子（Layout と feature の `aria-label` 重複）
 - 監視: `refreshFiles` のパス照合の Map 化、`scrollMargin`（overscan で吸収中）、警告の `code` 化
+- 検証: RESEARCH.md のスキーマ記述と実機ファイルのずれを検出する手段（`local-data/` の実ファイルを型ガードに通す手動スクリプトなど。リポジトリには実データを入れない）
 - 保守: `Button` の `ref` / `aria-label` 転送、`getState()` スプレッド idiom の `useShallow` 化、`README` の Node 表記と `engines.node`
 
 ## 5. 完了の定義（harness.md §10）との照合
 
-- [x] TASKS.md の全 26 タスクが `done`（`escalated` / `blocked` なし。最大 3 ラウンドで収束）
+- [x] TASKS.md の全 28 タスクが `done`（T-027 / T-028 は実機確認の修正。§1.1）（`escalated` / `blocked` なし。最大 3 ラウンドで収束）
 - [x] 全タスクが PR としてマージ済み（#4〜#29）
 - [x] Phase 4 の最終レビュー完了、本ファイルに指摘なしと記録
 - [x] リポジトリ全体で品質ゲート通過（1497 件）

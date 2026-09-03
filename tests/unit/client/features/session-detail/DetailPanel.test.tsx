@@ -223,6 +223,45 @@ describe("DetailPanel", () => {
     });
   });
 
+  it("recentMessages が 0 件（取得成功）のとき案内文を表示し、1 件以上なら表示しない（T-028）", async () => {
+    const session = makeSession();
+    getSessionMock().mockResolvedValue({
+      ok: true,
+      value: makeDetail(session, { recentMessages: [] }),
+    });
+    useSessionStore.setState({ sessions: [session], selectedKey: session.key });
+
+    render(<DetailPanel />);
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-empty-messages="true"]')).not.toBeNull();
+    });
+    expect(screen.getByText(/直近のログに表示できる発言がありません/)).toBeInTheDocument();
+    // reviewer Round 1 指摘: 文言が変わった（次にどうするかの案内を追加）。新しい文言も照合する。
+    expect(screen.getByText(/しばらくしてから「更新」を押してください/)).toBeInTheDocument();
+    expect(document.querySelectorAll("li[data-role]")).toHaveLength(0);
+    // reviewer Round 1 指摘: 0 件のときは <ol>（.messageList）自体を描画しない。
+    expect(document.querySelector("ol")).toBeNull();
+  });
+
+  it("recentMessages が 1 件以上のときは案内文を出さない（T-028）", async () => {
+    const session = makeSession();
+    getSessionMock().mockResolvedValue({
+      ok: true,
+      value: makeDetail(session, {
+        recentMessages: [{ role: "user", at: NOW_ISO, text: "本文" }],
+      }),
+    });
+    useSessionStore.setState({ sessions: [session], selectedKey: session.key });
+
+    render(<DetailPanel />);
+
+    await waitFor(() => {
+      expect(document.querySelectorAll("li[data-role]")).toHaveLength(1);
+    });
+    expect(document.querySelector('[data-empty-messages="true"]')).toBeNull();
+  });
+
   it("取得中は role=status（Loading）が表示される", async () => {
     const deferred = createDeferred<Result<SessionDetail, ApiErrorBody>>();
     getSessionMock().mockReturnValue(deferred.promise);
@@ -232,6 +271,8 @@ describe("DetailPanel", () => {
     render(<DetailPanel />);
 
     expect(screen.getByRole("status")).toBeInTheDocument();
+    // reviewer Round 1 指摘: 取得中は案内文（空メッセージ用）を出してはならない。
+    expect(document.querySelector('[data-empty-messages="true"]')).toBeNull();
 
     await act(async () => {
       deferred.resolve({ ok: true, value: makeDetail(session) });
@@ -263,6 +304,8 @@ describe("DetailPanel", () => {
     const alert = screen.getByRole("alert");
     expect(alert).toHaveTextContent("セッション詳細を読めませんでした。");
     expect(alert).toHaveTextContent("一覧から選び直してください。");
+    // reviewer Round 1 指摘: 取得失敗時は案内文（空メッセージ用）を出してはならない。
+    expect(document.querySelector('[data-empty-messages="true"]')).toBeNull();
   });
 
   it("Escape で selectedKey が null になる（閉じる）", async () => {

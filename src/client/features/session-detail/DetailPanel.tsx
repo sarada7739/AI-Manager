@@ -241,26 +241,36 @@ export function DetailPanel() {
       {messages.status === "error" ? (
         <ErrorBanner message={messages.error.message} hint={messages.error.hint} />
       ) : null}
+      {/* 取得成功かつ 0 件のときだけ案内を出す（取得中・失敗時は上の Loading / ErrorBanner が担う）。
+          パネル内の一部分の空状態で「列内または一覧全体の中央」ではないため、EmptyState は使わず段落にする。
+          文言は DESIGN.md §8 に従い「何が起きたか + 次にどうするか」。原因は 1 つに断定しない。 */}
+      {messages.status === "ok" && messages.detail.recentMessages.length === 0 ? (
+        <p className={styles.emptyMessages} data-empty-messages="true">
+          直近のログに表示できる発言がありません。ツールの実行が続いている間は発言が記録されないことがあります。しばらくしてから「更新」を押してください。
+        </p>
+      ) : null}
       {messages.status === "ok" ? (
         <>
-          <ol className={styles.messageList}>
-            {/* recentMessages は取得後に並べ替え・挿入をしない静的リスト。role + at だけでは
-                同一ロール・同一時刻が実データでも重複し得るため、index を含めて一意な key にする。 */}
-            {messages.detail.recentMessages.map((message, index) => (
-              <li
-                // biome-ignore lint/suspicious/noArrayIndexKey: 静的リストのため index を含めてよい（上のコメント参照）。
-                key={`${message.role}:${message.at}:${index}`}
-                data-role={message.role}
-                className={styles.messageItem}
-              >
-                <div className={styles.messageMeta}>
-                  <span className={styles.roleLabel}>{ROLE_LABELS[message.role]}</span>
-                  <span className={styles.messageAt}>{formatFixedDateTime(message.at)}</span>
-                </div>
-                <p className={styles.messageText}>{message.text}</p>
-              </li>
-            ))}
-          </ol>
+          {messages.detail.recentMessages.length > 0 ? (
+            <ol className={styles.messageList}>
+              {/* recentMessages は取得後に並べ替え・挿入をしない静的リスト。role + at だけでは
+                  同一ロール・同一時刻が実データでも重複し得るため、index を含めて一意な key にする。 */}
+              {messages.detail.recentMessages.map((message, index) => (
+                <li
+                  // biome-ignore lint/suspicious/noArrayIndexKey: 静的リストのため index を含めてよい（上のコメント参照）。
+                  key={`${message.role}:${message.at}:${index}`}
+                  data-role={message.role}
+                  className={styles.messageItem}
+                >
+                  <div className={styles.messageMeta}>
+                    <span className={styles.roleLabel}>{ROLE_LABELS[message.role]}</span>
+                    <span className={styles.messageAt}>{formatFixedDateTime(message.at)}</span>
+                  </div>
+                  <p className={styles.messageText}>{message.text}</p>
+                </li>
+              ))}
+            </ol>
+          ) : null}
           {messages.detail.parseWarnings.length > 0 ? (
             <p className={styles.warnings}>
               {messages.detail.parseWarnings.join(" ")}表示に影響はありません。

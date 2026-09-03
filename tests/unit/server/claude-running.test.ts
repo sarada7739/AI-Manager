@@ -258,7 +258,7 @@ describe("readRunningMeta: 異常系の集計", () => {
     expect(result.metas).toHaveLength(1);
     expect(result.metas[0]?.pid).toBe(5002);
     expect(result.warnings).toHaveLength(1);
-    expect(result.warnings[0]).toContain("1");
+    expect(result.warnings[0]).toContain("1 件");
   });
 
   it("256 KiB ちょうどのメタファイルは読める（境界値）", async () => {
@@ -425,5 +425,238 @@ describe("matchRunning", () => {
     expect(result.alive).toBe(true);
     expect(result.procStartMatches).toBe(false);
     expect(result.process).toEqual(proc);
+  });
+});
+
+// T-027: procStart（Windows FILETIME）は 2^53 を超えるため実機では数字の文字列で書かれる。
+// readRunningMeta が数値・数字文字列のどちらも受け付け、それ以外は不正として警告に数えることを確認する。
+describe("readRunningMeta: procStart が数値・数字文字列のどちらでも読める", () => {
+  let root: string | undefined;
+
+  afterEach(async () => {
+    if (root !== undefined) {
+      await rm(root, { recursive: true, force: true });
+      root = undefined;
+    }
+  });
+
+  it("procStart が数字だけの文字列（2^53 超）でも読み込め、procStart は数値として返り警告なし", async () => {
+    const created = await makeRoot("ai-manager-claude-running-procstart-string-");
+    root = created.root;
+    const { sessionsDir } = created;
+
+    await writeMeta(sessionsDir, "8001.json", {
+      pid: 8001,
+      sessionId: SID1,
+      cwd: "C:\\synthetic\\project",
+      startedAt: 1700000000000,
+      procStart: "134000000000000000",
+    });
+
+    const result = await readRunningMeta(root);
+
+    expect(result.warnings).toEqual([]);
+    expect(result.metas).toHaveLength(1);
+    expect(result.metas[0]?.procStart).toBe(134000000000000000);
+    expect(typeof result.metas[0]?.procStart).toBe("number");
+  });
+
+  it("procStart が数値（従来型）の場合も引き続き読み込める", async () => {
+    const created = await makeRoot("ai-manager-claude-running-procstart-number-");
+    root = created.root;
+    const { sessionsDir } = created;
+
+    await writeMeta(sessionsDir, "8002.json", {
+      pid: 8002,
+      sessionId: SID1,
+      cwd: "C:\\synthetic\\project",
+      startedAt: 1700000000000,
+      procStart: 134000000000000000,
+    });
+
+    const result = await readRunningMeta(root);
+
+    expect(result.warnings).toEqual([]);
+    expect(result.metas).toHaveLength(1);
+    expect(result.metas[0]?.procStart).toBe(134000000000000000);
+  });
+
+  it("数値の procStart と文字列の procStart が混在する 2 ファイルは両方読める", async () => {
+    const created = await makeRoot("ai-manager-claude-running-procstart-mixed-");
+    root = created.root;
+    const { sessionsDir } = created;
+
+    await writeMeta(sessionsDir, "8003.json", {
+      pid: 8003,
+      sessionId: SID1,
+      cwd: "C:\\synthetic\\project",
+      startedAt: 1700000000000,
+      procStart: 134000000003000000,
+    });
+    await writeMeta(sessionsDir, "8004.json", {
+      pid: 8004,
+      sessionId: SID1,
+      cwd: "C:\\synthetic\\project",
+      startedAt: 1700000000000,
+      procStart: "134000000004000000",
+    });
+
+    const result = await readRunningMeta(root);
+
+    expect(result.warnings).toEqual([]);
+    expect(result.metas).toHaveLength(2);
+
+    const byPid = new Map(result.metas.map((m) => [m.pid, m]));
+    expect(byPid.get(8003)?.procStart).toBe(134000000003000000);
+    expect(byPid.get(8004)?.procStart).toBe(134000000004000000);
+  });
+});
+
+describe("readRunningMeta: procStart が不正な値はスキップされ警告に数えられる", () => {
+  let root: string | undefined;
+
+  afterEach(async () => {
+    if (root !== undefined) {
+      await rm(root, { recursive: true, force: true });
+      root = undefined;
+    }
+  });
+
+  const invalidProcStartCases: Array<[string, unknown, number]> = [
+    ["空文字列", "", 9001],
+    ["0x 付き16進風文字列", "0x10", 9002],
+    ["数字とアルファベット混在", "12a", 9003],
+    ["負数の文字列", "-5", 9004],
+    ["null", null, 9005],
+    ["オブジェクト", {}, 9006],
+    // reviewer Round 1 指摘: 指数表記は数字だけの文字列（/^[0-9]+$/）にマッチしないため不正。
+    ["指数表記の文字列", "1e5", 9007],
+    // reviewer Round 1 指摘: 数字だけの文字列だが桁あふれし Number() が Infinity を返すため不正。
+    ["桁あふれする数字文字列", "9".repeat(400), 9008],
+  ];
+
+  it.each(invalidProcStartCases)(
+    "procStart が%s（%o）の場合はスキップされ警告 1 件に数えられる",
+    async (_label, invalidValue, pid) => {
+      const created = await makeRoot(`ai-manager-claude-running-procstart-invalid-${pid}-`);
+      root = created.root;
+      const { sessionsDir } = created;
+
+      await writeMeta(sessionsDir, `${pid}.json`, {
+        pid,
+        sessionId: SID1,
+        cwd: "C:\\synthetic\\project",
+        startedAt: 1700000000000,
+        procStart: invalidValue,
+      });
+
+      const result = await readRunningMeta(root);
+
+      expect(result.metas).toEqual([]);
+      expect(result.warnings).toHaveLength(1);
+      expect(result.warnings[0]).toContain("1 件");
+    },
+  );
+});
+
+describe("matchRunning: 文字列由来の procStart でも 1 秒の許容差で一致判定する", () => {
+  const baseMetaFromString: RunningMeta = {
+    pid: 100,
+    sessionId: SID1,
+    cwd: "C:\\synthetic\\project",
+    startedAt: 0,
+    // parseFileTime("134000000000000000") で得られる数値と同じ値。
+    procStart: 134000000000000000,
+    entrypoint: "cli",
+    version: null,
+  };
+
+  it("文字列由来の procStart に対し creationFileTime が +0.5 秒差 → procStartMatches:true", () => {
+    const proc: ProcessInfo = {
+      pid: 100,
+      name: "claude.exe",
+      creationFileTime: 134000000005000000,
+      commandLine: null,
+    };
+
+    const result = matchRunning(baseMetaFromString, [proc]);
+
+    expect(result.alive).toBe(true);
+    expect(result.procStartMatches).toBe(true);
+  });
+
+  it("文字列由来の procStart に対し creationFileTime が +2 秒差 → procStartMatches:false", () => {
+    const proc: ProcessInfo = {
+      pid: 100,
+      name: "claude.exe",
+      creationFileTime: 134000000020000000,
+      commandLine: null,
+    };
+
+    const result = matchRunning(baseMetaFromString, [proc]);
+
+    expect(result.alive).toBe(true);
+    expect(result.procStartMatches).toBe(false);
+  });
+});
+
+// reviewer Round 1 指摘: readRunningMeta が返した RunningMeta（procStart は文字列由来）を
+// そのまま matchRunning に渡す合成経路（回帰テスト）。procStart を「数字文字列」で書く際、
+// 2^53 を超える奇数値（Number() で丸めが起きる値）を使い、丸め後の値を基準に
+// ±0.5 秒 / ±2 秒で許容差の境界が機能することを確認する。
+describe("readRunningMeta → matchRunning の合成経路（回帰）", () => {
+  let root: string | undefined;
+
+  afterEach(async () => {
+    if (root !== undefined) {
+      await rm(root, { recursive: true, force: true });
+      root = undefined;
+    }
+  });
+
+  it("procStart が文字列で書かれた（2^53 超・丸めが起きる奇数値）メタを readRunningMeta で読み、matchRunning に渡すと、+0.5 秒差は procStartMatches:true、+2 秒差は false になる", async () => {
+    const created = await makeRoot("ai-manager-claude-running-composed-");
+    root = created.root;
+    const { sessionsDir } = created;
+
+    await writeMeta(sessionsDir, "8101.json", {
+      pid: 8101,
+      sessionId: SID1,
+      cwd: "C:\\synthetic\\project",
+      startedAt: 1700000000000,
+      // 2^53 を超え、Number() で丸めが起きる奇数値。実機の procStart 相当。
+      procStart: "134328283107540222",
+    });
+
+    const result = await readRunningMeta(root);
+
+    expect(result.warnings).toEqual([]);
+    expect(result.metas).toHaveLength(1);
+    const meta = result.metas[0];
+    expect(meta).toBeDefined();
+    if (meta === undefined) {
+      throw new Error("meta が undefined です");
+    }
+    expect(typeof meta.procStart).toBe("number");
+
+    const nearProc: ProcessInfo = {
+      pid: 8101,
+      name: "claude.exe",
+      creationFileTime: meta.procStart + 5_000_000,
+      commandLine: null,
+    };
+    const nearResult = matchRunning(meta, [nearProc]);
+    expect(nearResult.alive).toBe(true);
+    expect(nearResult.procStartMatches).toBe(true);
+
+    const farProc: ProcessInfo = {
+      pid: 8101,
+      name: "claude.exe",
+      creationFileTime: meta.procStart + 20_000_000,
+      commandLine: null,
+    };
+    const farResult = matchRunning(meta, [farProc]);
+    expect(farResult.alive).toBe(true);
+    expect(farResult.procStartMatches).toBe(false);
   });
 });
