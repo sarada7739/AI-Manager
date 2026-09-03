@@ -9,11 +9,13 @@ import type { AppConfig } from "./config.js";
 import { toApiError } from "./errors.js";
 import type { Logger } from "./log.js";
 import { createAccountsRoute } from "./routes/accounts.js";
+import { createEventsRoute } from "./routes/events.js";
 import { createHealthRoute } from "./routes/health.js";
 import { createSessionsRoute } from "./routes/sessions.js";
 import type { readClaudeDetail } from "./sources/claude/detail.js";
 import type { readCodexDetail } from "./sources/codex/detail.js";
-import type { SessionIndex } from "./store/index.js";
+import type { EventHub } from "./store/events.js";
+import type { RebuildResult, SessionIndex } from "./store/index.js";
 
 /** `createApp` の依存。 */
 export interface AppDeps {
@@ -32,9 +34,13 @@ export interface AppDeps {
   watcherMode?: () => "fs" | "poll" | "both";
   /** 現在時刻。テストでの差し替え用。既定 `() => new Date()`。 */
   now?: () => Date;
-  /** 詳細取得の実処理（テストでフェイク注入する場合に使う）。省略時は実物。 */
-  readClaudeDetail?: typeof readClaudeDetail;
-  readCodexDetail?: typeof readCodexDetail;
+  /** 詳細取得の実処理。sources を直接 import しないため、呼び出し側（index.ts）が実物を渡す。 */
+  readClaudeDetail: typeof readClaudeDetail;
+  readCodexDetail: typeof readCodexDetail;
+  /** SSE 配信ハブ（T-015）。呼び出し側（index.ts、またはテスト）が実物を渡す。 */
+  hub: EventHub;
+  /** 直列化済みの再走査（T-015）。呼び出し側（index.ts、またはテスト）が実物を渡す。 */
+  refresh: () => Promise<RebuildResult>;
 }
 
 /**
@@ -79,10 +85,17 @@ export function createApp(deps: AppDeps): Hono {
     version: deps.version,
     watcherMode: deps.watcherMode,
   });
+  const eventsRoute = createEventsRoute({
+    hub: deps.hub,
+    refresh: deps.refresh,
+    now: deps.now,
+    log: deps.log,
+  });
 
   app.route("/api", sessionsRoute);
   app.route("/api", accountsRoute);
   app.route("/api", healthRoute);
+  app.route("/api", eventsRoute);
 
   app.notFound((c) =>
     c.json(
