@@ -1,0 +1,38 @@
+/*
+ * ボードの列。角丸なし、背景は surface-1（DESIGN.md §5.1 / §6.2）。
+ * 列内スクロールと横方向の総幅は列自身が持つ（ColumnHeader は列内の先頭に置き position: sticky で固定）。
+ */
+.column {
+  width: var(--column-width);
+  flex: 0 0 auto;
+  background: var(--color-surface-1);
+  border-radius: 0;
+}
+
+.scroll {
+  overflow-y: auto;
+  max-height: 100vh;
+}
+
+.list {
+  padding: 0 var(--space-4);
+}
+
+/* 仮想化領域。高さは useVirtualizer.getTotalSize() を CSS 変数経由で受け取る（動的な値のため）。 */
+.virtualInner {
+  position: relative;
+  width: 100%;
+  height: var(--virtual-total-size);
+  margin-top: var(--space-3);
+}
+
+/* 仮想化された 1 行。オフセットは useVirtualizer の計算結果を CSS 変数経由で受け取る。 */
+.virtualRow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding-bottom: var(--space-3);
+  transform: translateY(var(--virtual-offset));
+}

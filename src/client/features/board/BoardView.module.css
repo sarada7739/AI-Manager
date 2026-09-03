@@ -1,0 +1,15 @@
+/*
+ * ボード表示。列を横並びにし、横スクロールを許可する（DESIGN.md §5.1）。
+ */
+.board {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  overflow-x: auto;
+  height: 100%;
+}
+
+.board:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
