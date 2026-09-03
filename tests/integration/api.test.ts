@@ -3,14 +3,22 @@
 // `createLogger({ sink })` を渡し、`app.request()` で実 HTTP を立てずに検証する。
 // フィクスチャは合成データのみ（os.homedir() には依存しない）。
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { AppDeps } from "../../src/server/app";
 import { createApp } from "../../src/server/app";
 import type { AppConfig } from "../../src/server/config";
 import { createLogger } from "../../src/server/log";
+import type { EventHub } from "../../src/server/store/events";
+import { createEventHub } from "../../src/server/store/events";
+import type { RebuildResult } from "../../src/server/store/index";
 import type { Result } from "../../src/shared/result";
 import { err, ok } from "../../src/shared/result";
 import type { Account, RecentMessage, SessionSummary, ToolKind } from "../../src/shared/types";
+
+// T-015 第 1 段階レビュー対応: AppDeps に hub / refresh が必須で追加される見込みのため、
+// 既存の createApp 呼び出しにもフェイクの hub / refresh を渡すようにする（既存のアサーションは変えない）。
+// 実装（app.ts への配線）はまだ反映されていない可能性があるため、GET /api/events・POST /api/refresh の
+// 新規テストは現時点で 404 になる場合がある（実装側の配線待ち）。
 
 const HOME_DIR = "C:\\synthetic\\home";
 
@@ -118,15 +126,44 @@ function makeFakeReadDetail(
   return { fn, calls };
 }
 
-function makeDeps(overrides?: Partial<AppDeps>): AppDeps {
+/**
+ * T-015 第 1 段階レビュー対応で `AppDeps` に必須追加される見込みのフィールド。
+ * 実装（app.ts）がまだ追加していない間も、拡張した型の変数として組み立ててから
+ * `AppDeps` へ渡すことで（フレッシュなオブジェクトリテラルではないため）
+ * 過剰プロパティチェックに引っかからないようにする。
+ */
+interface AppDepsWithEvents extends AppDeps {
+  hub: EventHub;
+  refresh: () => Promise<RebuildResult>;
+}
+
+function makeDeps(
+  overrides?: Partial<AppDeps> & { hub?: EventHub; refresh?: () => Promise<RebuildResult> },
+): AppDepsWithEvents {
   const { sink } = makeSinkCollector();
   const log = createLogger({ roots: [`${HOME_DIR}\\.claude`], homeDir: HOME_DIR, sink });
+  const hub = overrides?.hub ?? createEventHub({ log });
+  const refresh =
+    overrides?.refresh ??
+    vi.fn(async (): Promise<RebuildResult> => ({ scanned: 0, durationMs: 0, warnings: [] }));
+  // `AppDeps.readClaudeDetail` / `readCodexDetail` は必須のため、既定の無害なフェイクを渡す
+  // （詳細取得を検証しないテストがこの経路を触ることはないが、型を満たすために必要）。
+  const { fn: defaultReadClaudeDetail } = makeFakeReadDetail(
+    ok({ recentMessages: [], parseWarnings: [] }),
+  );
+  const { fn: defaultReadCodexDetail } = makeFakeReadDetail(
+    ok({ recentMessages: [], parseWarnings: [] }),
+  );
   return {
     index: makeFakeIndex(),
     config: makeConfig(),
     log,
     homeDir: HOME_DIR,
     version: "9.9.9",
+    hub,
+    refresh,
+    readClaudeDetail: defaultReadClaudeDetail,
+    readCodexDetail: defaultReadCodexDetail,
     ...overrides,
   };
 }
@@ -635,5 +672,37 @@ describe("CORS", () => {
     expect(res.status).toBeGreaterThanOrEqual(200);
     expect(res.status).toBeLessThan(300);
     expect(res.headers.get("access-control-allow-origin")).toBe("http://localhost:5173");
+  });
+});
+
+// T-015 第 1 段階レビュー対応: AppDeps.hub / refresh の配線（createApp 経由での到達）。
+// app.ts が /api/events, /api/refresh をまだマウントしていない場合、これらは 404 になる
+// （実装側の配線待ち。その場合は「落ちた」と報告する）。
+describe("GET /api/events / POST /api/refresh（createApp 経由）", () => {
+  it("GET /api/events は 200 で content-type が text/event-stream を含む", async () => {
+    const app = createApp(makeDeps());
+
+    const controller = new AbortController();
+    const res = await app.request("/api/events", { signal: controller.signal });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/event-stream");
+
+    await res.body?.getReader().cancel();
+    controller.abort();
+  });
+
+  it("POST /api/refresh は refresh() の結果を反映して 200 で { ok: true, scanned, durationMs } を返す", async () => {
+    const refresh = vi.fn(
+      async (): Promise<RebuildResult> => ({ scanned: 9, durationMs: 5, warnings: [] }),
+    );
+    const app = createApp(makeDeps({ refresh }));
+
+    const res = await app.request("/api/refresh", { method: "POST" });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ ok: true, scanned: 9, durationMs: 5 });
+    expect(refresh).toHaveBeenCalledTimes(1);
   });
 });

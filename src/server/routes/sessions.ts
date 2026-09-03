@@ -1,13 +1,14 @@
 // GET /api/sessions: 索引が持つセッション要約の一覧を返す。
 // GET /api/sessions/:tool/:id: 索引が持つ jsonlPath から詳細（直近メッセージ）を取り出して返す（T-014）。
-// ARCHITECTURE.md §2.1「server/routes → sources は禁止」の例外として、詳細取得の実処理
-// （readClaudeDetail / readCodexDetail）だけはタスクカードの設計で明示的に許可されている
-// （route はパスをリクエストパラメータから組み立てず、常に index.getSource() が返す jsonlPath だけを使う）。
+// ARCHITECTURE.md §2.1「server/routes → sources は禁止」に合わせ、詳細取得の実処理
+// （readClaudeDetail / readCodexDetail）は型だけを import し、実物は必ず呼び出し側
+// （app.ts 経由で index.ts）が渡す（T-015 第 2 段階でのレビュー引き継ぎ: 既定 import を撤去）。
+// route はパスをリクエストパラメータから組み立てず、常に index.getSource() が返す jsonlPath だけを使う。
 
 import { Hono } from "hono";
 import { toApiError } from "../errors.js";
-import { readClaudeDetail as defaultReadClaudeDetail } from "../sources/claude/detail.js";
-import { readCodexDetail as defaultReadCodexDetail } from "../sources/codex/detail.js";
+import type { readClaudeDetail } from "../sources/claude/detail.js";
+import type { readCodexDetail } from "../sources/codex/detail.js";
 import type { SessionIndex } from "../store/index.js";
 
 /** id パラメータの検証用パターン（UUID / threadId 形式。大文字小文字を区別しない）。 */
@@ -19,16 +20,16 @@ export interface SessionsRouteDeps {
   index: Pick<SessionIndex, "getAll" | "get" | "getSource">;
   /** 現在時刻。省略時は `() => new Date()`（テストでの差し替え用）。 */
   now?: () => Date;
-  /** 詳細取得の実処理（テストでフェイク注入する場合に使う）。省略時は実物。 */
-  readClaudeDetail?: typeof defaultReadClaudeDetail;
-  readCodexDetail?: typeof defaultReadCodexDetail;
+  /** 詳細取得の実処理。sources を直接 import しないため、呼び出し側が実物（またはテスト用フェイク）を渡す。 */
+  readClaudeDetail: typeof readClaudeDetail;
+  readCodexDetail: typeof readCodexDetail;
 }
 
 /** `GET /sessions`, `GET /sessions/:tool/:id` を持つ Hono インスタンスを作る。`app.ts` が `/api` 配下にマウントする。 */
 export function createSessionsRoute(deps: SessionsRouteDeps): Hono {
   const now = deps.now ?? (() => new Date());
-  const readClaudeDetail = deps.readClaudeDetail ?? defaultReadClaudeDetail;
-  const readCodexDetail = deps.readCodexDetail ?? defaultReadCodexDetail;
+  const readClaudeDetail = deps.readClaudeDetail;
+  const readCodexDetail = deps.readCodexDetail;
   const route = new Hono();
 
   route.get("/sessions", (c) => {

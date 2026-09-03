@@ -1,9 +1,9 @@
 # TASKS.md — タスク台帳（進捗の唯一の真実）
 
 ## 進捗サマリ
-- 全 26 件 / 完了 21 件 / 進行中 3 件 / 未着手 2 件
-- 現在のタスク: T-015（Round 3）/ T-023（テスト中）/ T-024（レビュー中）
-- 最終更新: 2026-09-03T13:05:00+09:00
+- 全 26 件 / 完了 22 件 / 進行中 2 件 / 未着手 2 件
+- 現在のタスク: T-023（テスト中）/ T-024（Round 2）。次は T-025
+- 最終更新: 2026-09-03T13:15:00+09:00
 
 ## フェーズ進捗
 
@@ -35,7 +35,7 @@
 | T-012 | セッション索引とアカウント合成 | T-009, T-010, T-011 | done | 2 | #18 |
 | T-013 | Hono API: sessions / accounts / health | T-012 | done | 1 | #19 |
 | T-014 | セッション詳細 API とメッセージ抽出 | T-003, T-013 | done | 1 | #20 |
-| T-015 | ファイル監視・ポーリング・SSE・refresh | T-013 | in_progress | 1 | - |
+| T-015 | ファイル監視・ポーリング・SSE・refresh | T-013 | done | 3 | #25 |
 | T-016 | デザイントークンとグローバルスタイル | T-001 | done | 1 | #9 |
 | T-017 | 汎用 UI コンポーネント | T-016 | done | 1 | #14 |
 | T-018 | グルーピング・絞り込み・並べ替えの純粋関数 | T-002, T-005 | done | 3 | #11 |
@@ -233,13 +233,14 @@
 ### T-015 ファイル監視・ポーリング・SSE・refresh
 - **目的**: F-9 の自動更新をサーバ側で成立させる
 - **受け入れ条件**:
-  - [ ] `startWatcher(roots, onChange)` が `fs.watch({ recursive: true })` を試み、失敗したらポーリングのみで動く。成功しても `pollIntervalSec` ごとに stat 再走査する
-  - [ ] 変更は 300ms で debounce し、変更ファイルの集合を `onChange(paths)` に渡す。`sessions/` 配下の変化は稼働状態の再計算だけを起こす
-  - [ ] `GET /api/events` が SSE で `sessions-changed`（payload: `{ changed: number, at }`）と 30 秒ごとの `heartbeat` を送る。切断時に購読者を外す
-  - [ ] `POST /api/refresh` が `rebuild()` を実行し `{ ok, scanned, durationMs }` を返す。同時実行は 1 つに直列化する
-  - [ ] `/api/health` の `watcher` が `fs` / `poll` / `both` を返す
+  - [x] `startWatcher(roots, onChange)` が `fs.watch({ recursive: true })` を試み、失敗したらポーリングのみで動く。成功しても `pollIntervalSec` ごとに stat 再走査する
+  - [x] 変更は 300ms で debounce し、変更ファイルの集合を `onChange(paths)` に渡す。`sessions/` 配下の変化は稼働状態の再計算だけを起こす
+  - [x] `GET /api/events` が SSE で `sessions-changed`（payload: `{ changed: number, at }`）と 30 秒ごとの `heartbeat` を送る。切断時に購読者を外す
+  - [x] `POST /api/refresh` が `rebuild()` を実行し `{ ok, scanned, durationMs }` を返す。同時実行は 1 つに直列化する
+  - [x] `/api/health` の `watcher` が `fs` / `poll` / `both` を返す
 - **参照**: ARCHITECTURE.md §4.2, §5 / RESEARCH.md §7
 - **触ってよい範囲**: `src/server/store/watcher.ts`, `src/server/store/events.ts`, `src/server/routes/events.ts`, `src/server/routes/health.ts`, `src/server/index.ts`
+- **T-015 レビューからの引き継ぎ（T-025 / Phase 4）**: `WatcherMode` の `"fs"` は実装上返らない（`both` / `poll` のみ。ポーリングは常時動く）。`routes/events.ts` の `Promise.race` で `stream.sleep` のタイマーが取り消されない（接続 1 本あたり最大 1 秒残る。`AbortSignal` 付き sleep に差し替え候補）。`closeAllConnections()` は graceful な `stream.close()` 前のソケットを破壊し得る（ローカル専用なので許容）。テスト側の型シム（`SubscriberWithClose` / `AppDepsWithEvents`）は不要になったので整理。`SessionsChangedPayload.changed` は `rebuild` では走査件数。`server-entry.test.ts` はテキスト照合なので `startHeartbeat` の呼び忘れ等は検知しない（route 側の保険あり）。クライアント（T-025）は `sessions-changed` を受けて `load()`、`heartbeat` 途絶で 10 秒ポーリングにフォールバック
 
 ### T-016 デザイントークンとグローバルスタイル
 - **目的**: DESIGN.md §9 を `tokens.css` にし、以降の UI の唯一の参照先にする
