@@ -1,0 +1,15 @@
+/*
+ * App のレイアウト補助。ボード / リストと詳細パネルを横並びにする（T-025）。トークン経由のみ。
+ */
+.body {
+  display: flex;
+  gap: var(--space-4);
+  align-items: flex-start;
+  /* DetailPanel のスライドインアニメーション中に横スクロールバーが出ないようにする。 */
+  overflow-x: hidden;
+}
+
+.view {
+  flex: 1 1 auto;
+  min-width: 0;
+}

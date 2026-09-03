@@ -1,7 +1,8 @@
-// ヘッダ帯。タイトル・時計・件数・表示切替・更新ボタンを横並びにする（T-020）。
+// ヘッダ帯。タイトル・時計・件数・表示切替・更新ボタンを横並びにする（T-020 / T-025）。
+import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { Pill } from "../components/index.js";
-import { RefreshButton } from "../features/refresh/RefreshButton.js";
+import { RefreshButton } from "../features/refresh/index.js";
 import { selectCounts } from "../store/selectors.js";
 import { useSessionStore } from "../store/useSessionStore.js";
 import styles from "./Header.module.css";
@@ -9,6 +10,8 @@ import styles from "./Header.module.css";
 export interface HeaderProps {
   /** 現在時刻。省略時は内部タイマーで 1 分ごとに更新する（テストでの差し替え用）。 */
   now?: Date;
+  /** 右端に差し込む追加要素（T-025: LiveStatus）。 */
+  extra?: ReactNode;
 }
 
 /** `HH:mm` を 24 時間表記で整形する。 */
@@ -19,7 +22,7 @@ const clockFormatter = new Intl.DateTimeFormat("ja-JP", {
 });
 
 /** ヘッダ帯。DESIGN.md §5.1 のレイアウトに対応する。 */
-export function Header({ now: nowProp }: HeaderProps) {
+export function Header({ now: nowProp, extra }: HeaderProps) {
   const [internalNow, setInternalNow] = useState(() => new Date());
   const now = nowProp ?? internalNow;
 
@@ -44,7 +47,6 @@ export function Header({ now: nowProp }: HeaderProps) {
   }, [nowProp]);
 
   const sessions = useSessionStore((state) => state.sessions);
-  const loading = useSessionStore((state) => state.status.loading);
   const view = useSessionStore((state) => state.view);
   const setView = useSessionStore((state) => state.setView);
 
@@ -54,8 +56,6 @@ export function Header({ now: nowProp }: HeaderProps) {
     () => selectCounts({ ...useSessionStore.getState(), sessions }),
     [sessions],
   );
-
-  const showUpdating = loading && sessions.length > 0;
 
   return (
     <div className={styles.header}>
@@ -85,7 +85,7 @@ export function Header({ now: nowProp }: HeaderProps) {
           />
         </div>
         <RefreshButton />
-        {showUpdating ? <span className={styles.updating}>更新中</span> : null}
+        {extra}
       </div>
     </div>
   );

@@ -14,6 +14,23 @@ import type { SessionSummary } from "../../../../src/shared/types.js";
 
 const NOW_ISO = "2026-01-01T00:00:00.000Z";
 
+// App は T-025 で useAutoRefresh()（SSE 購読 + ポーリングフォールバック）を呼ぶようになった。
+// jsdom は EventSource を実装していないため既定では自動的にポーリングのみへフォールバックするが、
+// タスクカードの指定どおり明示的にフェイク EventSource を注入し、購読・close 呼び出しで
+// 例外が起きないことを保証する。
+class FakeEventSource {
+  static instances: FakeEventSource[] = [];
+  closed = false;
+  constructor(public url: string) {
+    FakeEventSource.instances.push(this);
+  }
+  addEventListener(): void {}
+  removeEventListener(): void {}
+  close(): void {
+    this.closed = true;
+  }
+}
+
 function makeSession(overrides: Partial<SessionSummary> = {}): SessionSummary {
   return {
     key: "claude:00000000-0000-4000-8000-000000000001",
@@ -84,6 +101,8 @@ function createDeferred<T>(): { promise: Promise<T>; resolve: (value: T) => void
 
 beforeEach(() => {
   window.history.replaceState(null, "", "/");
+  FakeEventSource.instances = [];
+  vi.stubGlobal("EventSource", FakeEventSource);
 });
 
 afterEach(() => {
@@ -93,7 +112,7 @@ afterEach(() => {
 });
 
 describe("App", () => {
-  it("初回は role=status（Loading）が表示され、データ取得後にプレースホルダ data-view='board' が表示される", async () => {
+  it("初回は role=status（Loading）が表示され、データ取得後にプレースホルダ data-feature='board' が表示される", async () => {
     const deferred = createDeferred<FakeResponse>();
     const fakeFetch = makeFakeFetch({ sessions: deferred.promise });
     vi.stubGlobal("fetch", fakeFetch);
@@ -102,7 +121,9 @@ describe("App", () => {
 
     const { container } = render(<App />);
 
-    expect(screen.getByRole("status")).toBeInTheDocument();
+    // role=status は初回ローディングの Loading（aria-label『読み込み中』）と、ヘッダ右端の
+    // LiveStatus（T-025 で常設）の 2 つが同時に存在しうるため、Loading の方を名前で区別する。
+    expect(screen.getByRole("status", { name: "読み込み中" })).toBeInTheDocument();
 
     await act(async () => {
       deferred.resolve(jsonResponse(200, { sessions: [makeSession()], generatedAt: NOW_ISO }));
@@ -110,9 +131,9 @@ describe("App", () => {
     });
 
     await waitFor(() => {
-      expect(container.querySelector('[data-view="board"]')).not.toBeNull();
+      expect(container.querySelector('[data-feature="board"]')).not.toBeNull();
     });
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "読み込み中" })).not.toBeInTheDocument();
   });
 
   it("document.title が『AI-Manager · 1 稼働』になる（running 1 件）", async () => {
@@ -176,7 +197,7 @@ describe("App", () => {
     ).toBeInTheDocument();
   });
 
-  it("ヘッダの『リスト』をクリックすると data-view='list' に切り替わる", async () => {
+  it("ヘッダの『リスト』をクリックすると data-feature='list' に切り替わる", async () => {
     const fakeFetch = makeFakeFetch({
       sessions: jsonResponse(200, { sessions: [makeSession()], generatedAt: NOW_ISO }),
     });
@@ -186,13 +207,13 @@ describe("App", () => {
 
     const { container } = render(<App />);
     await waitFor(() => {
-      expect(container.querySelector('[data-view="board"]')).not.toBeNull();
+      expect(container.querySelector('[data-feature="board"]')).not.toBeNull();
     });
 
     fireEvent.click(screen.getByRole("button", { name: "リスト" }));
 
-    expect(container.querySelector('[data-view="list"]')).not.toBeNull();
-    expect(container.querySelector('[data-view="board"]')).toBeNull();
+    expect(container.querySelector('[data-feature="list"]')).not.toBeNull();
+    expect(container.querySelector('[data-feature="board"]')).toBeNull();
   });
 
   it("startUrlSync により初期 URL ?view=list で起動するとリスト表示になる", async () => {
@@ -207,7 +228,7 @@ describe("App", () => {
     const { container } = render(<App />);
 
     await waitFor(() => {
-      expect(container.querySelector('[data-view="list"]')).not.toBeNull();
+      expect(container.querySelector('[data-feature="list"]')).not.toBeNull();
     });
   });
 
@@ -221,9 +242,46 @@ describe("App", () => {
 
     const { container, unmount } = render(<App />);
     await waitFor(() => {
-      expect(container.querySelector('[data-view="board"]')).not.toBeNull();
+      expect(container.querySelector('[data-feature="board"]')).not.toBeNull();
     });
 
     expect(() => unmount()).not.toThrow();
+  });
+
+  it("配線: compose / accounts / filters / board の各 feature スロットが描画される（data-feature）", async () => {
+    const fakeFetch = makeFakeFetch({
+      sessions: jsonResponse(200, { sessions: [makeSession()], generatedAt: NOW_ISO }),
+    });
+    vi.stubGlobal("fetch", fakeFetch);
+    vi.resetModules();
+    const { App } = await import("../../../../src/client/app/App.js");
+
+    const { container } = render(<App />);
+    await waitFor(() => {
+      expect(container.querySelector('[data-feature="board"]')).not.toBeNull();
+    });
+
+    expect(container.querySelector('[data-feature="compose"]')).not.toBeNull();
+    expect(container.querySelector('[data-feature="account-strip"]')).not.toBeNull();
+    expect(container.querySelector('[data-feature="filter-bar"]')).not.toBeNull();
+  });
+
+  it("Header の extra スロットに LiveStatus（自動更新の状態表示）が描画される", async () => {
+    const fakeFetch = makeFakeFetch({
+      sessions: jsonResponse(200, { sessions: [makeSession()], generatedAt: NOW_ISO }),
+    });
+    vi.stubGlobal("fetch", fakeFetch);
+    vi.resetModules();
+    const { App } = await import("../../../../src/client/app/App.js");
+
+    const { container } = render(<App />);
+    // 読み込み完了（board 表示）まで待つ。完了後は role=status の要素が LiveStatus 1 つだけになる
+    // （初回ローディングの Loading は読み込み中しか role=status を持たないため）。
+    await waitFor(() => {
+      expect(container.querySelector('[data-feature="board"]')).not.toBeNull();
+    });
+
+    const statusEl = screen.getByRole("status");
+    expect(["自動更新: 接続", "自動更新: ポーリング", "更新中"]).toContain(statusEl.textContent);
   });
 });

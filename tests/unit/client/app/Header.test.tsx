@@ -119,31 +119,33 @@ describe("Header", () => {
     expect(screen.getByRole("button", { name: "更新" })).toBeInTheDocument();
   });
 
-  it("status.loading && sessions.length > 0 のとき『更新中』が表示される", () => {
+  // T-025: 「更新中」の表示は LiveStatus（tests/unit/client/features/refresh/LiveStatus.test.tsx）
+  // に移った。Header 自身はもう表示しない（extra スロットで差し込まれるだけ）。
+  it("status.loading && sessions.length > 0 でも Header 自身は『更新中』を表示しない（LiveStatus に移譲した）", () => {
     useSessionStore.setState({
       sessions: [makeSession()],
-      status: { loading: true, error: null, lastFetchedAt: null, live: false },
-    });
-    render(<Header now={new Date(2026, 8, 3, 9, 5)} />);
-    expect(screen.getByText("更新中")).toBeInTheDocument();
-  });
-
-  it("loading でもデータが無ければ『更新中』は表示されない", () => {
-    useSessionStore.setState({
-      sessions: [],
       status: { loading: true, error: null, lastFetchedAt: null, live: false },
     });
     render(<Header now={new Date(2026, 8, 3, 9, 5)} />);
     expect(screen.queryByText("更新中")).not.toBeInTheDocument();
   });
 
-  it("loading が false なら sessions があっても『更新中』は表示されない", () => {
-    useSessionStore.setState({
-      sessions: [makeSession()],
-      status: { loading: false, error: null, lastFetchedAt: null, live: false },
-    });
-    render(<Header now={new Date(2026, 8, 3, 9, 5)} />);
-    expect(screen.queryByText("更新中")).not.toBeInTheDocument();
+  it("extra prop で渡した要素が右端（更新ボタンの後）に描画される", () => {
+    render(
+      <Header
+        now={new Date(2026, 8, 3, 9, 5)}
+        extra={<span data-testid="extra-slot">自動更新: 接続</span>}
+      />,
+    );
+    const extraEl = screen.getByTestId("extra-slot");
+    const refreshButton = screen.getByRole("button", { name: "更新" });
+    expect(
+      refreshButton.compareDocumentPosition(extraEl) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("extra を渡さない場合は何も追加描画されない（クラッシュしない）", () => {
+    expect(() => render(<Header now={new Date(2026, 8, 3, 9, 5)} />)).not.toThrow();
   });
 
   it("now を渡さない場合、1 分ごとに表示が更新される（次の分の 0 秒で切り替わる）", () => {

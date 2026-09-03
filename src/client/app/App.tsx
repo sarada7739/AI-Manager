@@ -1,12 +1,20 @@
-// アプリのルートコンポーネント。ページ骨格を組み立て、起動時の読み込みと URL 同期を行う（T-020）。
+// アプリのルートコンポーネント。ページ骨格を組み立て、起動時の読み込み・URL 同期・自動更新を行い、
+// 各 feature をスロットに差し込む（T-020 / T-025）。
 import { type ReactNode, useEffect } from "react";
 import { EmptyState, ErrorBanner, Loading } from "../components/index.js";
+import { AccountStrip } from "../features/accounts/index.js";
+import { BoardView } from "../features/board/index.js";
+import { ComposeBox } from "../features/compose/index.js";
+import { FilterBar } from "../features/filters/index.js";
+import { ListView } from "../features/list/index.js";
+import { LiveStatus, useAutoRefresh } from "../features/refresh/index.js";
+import { DetailPanel } from "../features/session-detail/index.js";
 import { selectCounts } from "../store/selectors.js";
 import { startUrlSync } from "../store/url-sync.js";
 import { useSessionStore } from "../store/useSessionStore.js";
+import styles from "./App.module.css";
 import { Header } from "./Header.js";
 import { Layout } from "./Layout.js";
-import { BoardViewPlaceholder, ListViewPlaceholder } from "./ViewPlaceholder.js";
 
 export function App() {
   const load = useSessionStore((state) => state.load);
@@ -25,6 +33,9 @@ export function App() {
     const unsubscribe = startUrlSync(useSessionStore);
     return unsubscribe;
   }, []);
+
+  // SSE 購読 + ポーリングフォールバックによる自動更新（F-9 / T-025）。
+  useAutoRefresh();
 
   // タイトルバーに稼働数を表示する。sessions が変わるたびに再計算する。
   useEffect(() => {
@@ -47,15 +58,20 @@ export function App() {
       />
     );
   } else {
-    body = view === "board" ? <BoardViewPlaceholder /> : <ListViewPlaceholder />;
+    body = (
+      <div className={styles.body}>
+        <div className={styles.view}>{view === "board" ? <BoardView /> : <ListView />}</div>
+        <DetailPanel />
+      </div>
+    );
   }
 
   return (
     <Layout
-      header={<Header />}
-      compose={null}
-      accounts={null}
-      filters={null}
+      header={<Header extra={<LiveStatus />} />}
+      compose={<ComposeBox />}
+      accounts={<AccountStrip />}
+      filters={<FilterBar />}
       main={
         <>
           {error ? <ErrorBanner message={error.message} hint={error.hint} /> : null}

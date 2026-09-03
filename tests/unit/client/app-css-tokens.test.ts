@@ -4,9 +4,15 @@ import { describe, expect, it } from "vitest";
 
 // T-020 受け入れ条件:
 // 「src/client/app/*.module.css と src/client/features/**/*.module.css にトークン外の値が無いこと」
-// 「Header.module.css か Layout.module.css に position: sticky があること」
 // node 環境・ファイル読み取りベース（jsdom 不要）。
 // tests/unit/client/components-css-tokens.test.ts の検査ロジックを複製したもの。
+//
+// T-025 レビュー指摘（BLOCKING）: 以前は「Header.module.css か Layout.module.css に
+// position: sticky がある」を検査していたが、Layout.module.css の「sticky を廃止した」旨の
+// コメント文字列（コメントを除去せずに正規表現を当てていた）に一致して空振り pass していた。
+// 実装方針が変わり、ヘッダ帯は sticky にせず FilterBar.module.css 側の sticky だけを残す
+// （Phase 4 で --header-height を追加して両立させる。TASKS.md の T-025 引き継ぎ参照）ため、
+// 検査対象そのものを FilterBar.module.css に変更し、他の検査と同じくコメントを除去してから見る。
 
 const ROOT = process.cwd();
 const APP_DIR = path.join(ROOT, "src", "client", "app");
@@ -149,13 +155,21 @@ describe("src/client/app/*.module.css と src/client/features/**/*.module.css �
     expect(anyUsesVar).toBe(true);
   });
 
-  it("Header.module.css か Layout.module.css のいずれかに position: sticky がある", () => {
+  it("FilterBar.module.css に position: sticky がある（ヘッダ帯は sticky にしない方針。コメントを除去してから検査する）", () => {
+    const filterBarCssPath = path.join(FEATURES_DIR, "filters", "FilterBar.module.css");
+    expect(existsSync(filterBarCssPath)).toBe(true);
+    const withoutComments = readText(filterBarCssPath).replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(withoutComments).toMatch(/position\s*:\s*sticky/);
+  });
+
+  it("Header.module.css と Layout.module.css には position: sticky が無い（コメント文字列との空振り一致を防ぐための回帰）", () => {
     const headerCssPath = path.join(APP_DIR, "Header.module.css");
     const layoutCssPath = path.join(APP_DIR, "Layout.module.css");
-    const headerHasSticky =
-      existsSync(headerCssPath) && /position\s*:\s*sticky/.test(readText(headerCssPath));
-    const layoutHasSticky =
-      existsSync(layoutCssPath) && /position\s*:\s*sticky/.test(readText(layoutCssPath));
-    expect(headerHasSticky || layoutHasSticky).toBe(true);
+    const headerWithoutComments = readText(headerCssPath).replace(/\/\*[\s\S]*?\*\//g, "");
+    const layoutWithoutComments = existsSync(layoutCssPath)
+      ? readText(layoutCssPath).replace(/\/\*[\s\S]*?\*\//g, "")
+      : "";
+    expect(headerWithoutComments).not.toMatch(/position\s*:\s*sticky/);
+    expect(layoutWithoutComments).not.toMatch(/position\s*:\s*sticky/);
   });
 });

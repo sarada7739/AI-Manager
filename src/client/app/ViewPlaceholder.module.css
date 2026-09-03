@@ -1,9 +1,0 @@
-/*
- * ボード / リスト表示のプレースホルダ（T-023 / T-024 で置き換える）。
- */
-.placeholder {
-  padding: var(--space-5);
-  color: var(--color-text-3);
-  font-size: var(--text-sm);
-  line-height: var(--leading-sm);
-}
