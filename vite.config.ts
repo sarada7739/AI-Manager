@@ -11,7 +11,10 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      "/api": {
+      // root が src/client のため、src/client/api/client.ts は Vite 上では /api/client.ts になる。
+      // 前方一致の "/api" だとそのモジュール要求までサーバへ転送して 404 になるので、
+      // ARCHITECTURE.md §5 の API パスだけを正規表現で転送する（T-026 で発覚）
+      "^/api/(sessions|accounts|health|events|refresh)(?![A-Za-z0-9_.-])": {
         target: "http://127.0.0.1:4317",
         changeOrigin: true,
       },

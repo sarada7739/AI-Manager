@@ -1,9 +1,9 @@
 # TASKS.md — タスク台帳（進捗の唯一の真実）
 
 ## 進捗サマリ
-- 全 26 件 / 完了 25 件 / 進行中 1 件 / 未着手 0 件
-- 現在のタスク: T-026（レビュー Round 2）。残り 1 件
-- 最終更新: 2026-09-03T17:45:00+09:00
+- 全 26 件 / 完了 26 件 / 進行中 0 件 / 未着手 0 件
+- 現在のタスク: Phase 3 完了。次は Phase 4（最終レビュー → docs/FINAL_REVIEW.md）
+- 最終更新: 2026-09-03T17:55:00+09:00
 
 ## フェーズ進捗
 
@@ -12,8 +12,8 @@
 | 0 | 実機調査 | done | #1 |
 | 1 | ハーネス文書生成 | done | #2 |
 | 2 | タスク分解 | done | #3 |
-| 3 | タスク実行ループ | in_progress | - |
-| 4 | 最終レビュー | todo | - |
+| 3 | タスク実行ループ | done | #4〜#29 |
+| 4 | 最終レビュー | in_progress | - |
 
 ## タスク一覧
 
@@ -46,7 +46,7 @@
 | T-023 | ボード表示（列・カード・仮想スクロール） | T-021 | done | 3 | #27 |
 | T-024 | リスト表示（テーブル・並べ替え・仮想スクロール） | T-021 | done | 3 | #26 |
 | T-025 | 詳細パネル・指示入力欄（無効）・自動更新・キーボード操作 | T-014, T-015, T-023, T-024 | done | 2 | #28 |
-| T-026 | E2E と README | T-022, T-025 | in_progress | 1 | - |
+| T-026 | E2E と README | T-022, T-025 | done | 3 | #29 |
 
 依存グラフは DAG（循環なし）。実行順は ID 順で依存を満たす。
 
@@ -367,10 +367,12 @@
 ### T-026 E2E と README
 - **目的**: 主要導線の E2E と、README どおりに起動できること
 - **受け入れ条件**:
-  - [ ] `e2e/` に Playwright テスト: フィクスチャ roots でサーバを起動 → ボードに列が出る → リストへ切替 → 「Claude」で絞り込み → 行をクリックで詳細パネルが開く → `Esc` で閉じる
-  - [ ] `pnpm e2e` が通る（`playwright install chromium` の手順を README に記載）
-  - [ ] `README.md`（日本語）: 概要、前提（Windows 11 / Node / pnpm）、セットアップ、起動、`local-data/config.json` の例（表示名の上書き、`activeWindowMinutes`）、読み取り専用である旨と読まないファイルの一覧、トラブルシュート（`~/.claude/projects` が無い、プロセス情報が取れない）
-  - [ ] README の手順どおりに `pnpm install` → `pnpm dev` で起動できる
+  - [x] `e2e/` に Playwright テスト: フィクスチャ roots でサーバを起動 → ボードに列が出る → リストへ切替 → 「Claude」で絞り込み → 行をクリックで詳細パネルが開く → `Esc` で閉じる
+  - [x] `pnpm e2e` が通る（`playwright install chromium` の手順を README に記載）
+  - [x] `README.md`（日本語）: 概要、前提（Windows 11 / Node / pnpm）、セットアップ、起動、`local-data/config.json` の例（表示名の上書き、`activeWindowMinutes`）、読み取り専用である旨と読まないファイルの一覧、トラブルシュート（`~/.claude/projects` が無い、プロセス情報が取れない）
+  - [x] README の手順どおりに `pnpm install` → `pnpm dev` で起動できる
 - **参照**: harness.md §10 / ARCHITECTURE.md §8
 - **触ってよい範囲**: `e2e/**`, `README.md`, `playwright.config.ts`, `package.json`（e2e script のみ）、`tests/unit/readme-contract.test.ts`（tester）。メインの判断で `src/server/config.ts`（`AI_MANAGER_CONFIG_PATH`）と `vite.config.ts`（`/api` プロキシの限定）も同時に変更
 - **T-001 レビューからの引き継ぎ**: `playwright.config.ts` の `baseURL` は Hono のポートを指しているが静的配信をしていない。`webServer` でサーバとクライアントを起動する形に見直す
+- **T-026 レビューからの引き継ぎ（Phase 4）**: README のトラブルシュートに E2E 関連（`pnpm exec playwright install chromium` 未実行時の症状、`pnpm e2e` が `local-data/e2e/` を毎回削除・再生成すること）を追記する。`README.md` の「Node.js 22 以上」は推定（`engines.node` を入れるなら揃える）。`vite.config.ts` の `/api` プロキシは API パスの正規表現に限定（`src/client/api/` と衝突するため。ARCHITECTURE §5 に API を足すときはここも更新）。`AI_MANAGER_CONFIG_PATH` はローカル環境変数で `config.json` と同じ信頼境界（`AppConfig.roots` の JSDoc に環境変数経路も追記候補）。DESIGN.md §5.1 のヘッダ帯 sticky の差分は T-025 引き継ぎと合わせて ADR 化
+
