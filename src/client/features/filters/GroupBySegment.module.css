@@ -1,0 +1,8 @@
+/*
+ * 並べ方セグメント。Pill.filter を横並びにするだけ（DESIGN.md §6.4）。
+ */
+.segment {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
