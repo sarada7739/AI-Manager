@@ -38,7 +38,7 @@ export interface ClaudeSummaryParts {
 }
 
 /** JSONL 1 行分の共通の型。`type` だけを保証し、それ以外のフィールドは種別ごとに読む。 */
-interface ClaudeLine {
+export interface ClaudeLine {
   type: string;
   value: Record<string, unknown>;
 }
@@ -120,7 +120,7 @@ function asBoolean(obj: unknown, key: string): boolean | undefined {
 }
 
 /** 1 行を ClaudeLine にパースする。失敗（JSON 不正・非オブジェクト・type 欠落/非文字列）は null。 */
-function parseLine(raw: string): ClaudeLine | null {
+export function parseLine(raw: string): ClaudeLine | null {
   let json: unknown;
   try {
     json = JSON.parse(raw);
@@ -158,7 +158,7 @@ function parseRecords(lines: readonly string[]): { records: ClaudeLine[]; failur
  * これらは cwd / version / gitBranch / entrypoint / model / title / lastMessage の
  * どの抽出からも除外する。
  */
-function isIgnorableLine(line: ClaudeLine): boolean {
+export function isIgnorableLine(line: ClaudeLine): boolean {
   if (asBoolean(line.value, "isSidechain") === true) {
     return true;
   }
@@ -232,7 +232,7 @@ function lastNonEmptyField(
  * 配列なら type === "text" の text を "\n" で連結。text が無く type === "image" が
  * 1 つでもあれば "(画像)"。どちらも無ければ「本文なし」＝ null（tool_result のみ等）。
  */
-function extractUserText(content: unknown): string | null {
+export function extractUserText(content: unknown): string | null {
   if (isString(content)) {
     return content.trim().length > 0 ? content : null;
   }
@@ -268,7 +268,7 @@ function extractUserText(content: unknown): string | null {
  * 配列なら type === "text" の text を "\n" で連結。空なら「本文なし」＝ null
  * （tool_use だけの行はメッセージとして扱わない）。文字列が来た場合はそのまま採用する。
  */
-function extractAssistantText(content: unknown): string | null {
+export function extractAssistantText(content: unknown): string | null {
   if (isString(content)) {
     return content.length > 0 ? content : null;
   }

@@ -11,12 +11,17 @@ import type { Logger } from "./log.js";
 import { createAccountsRoute } from "./routes/accounts.js";
 import { createHealthRoute } from "./routes/health.js";
 import { createSessionsRoute } from "./routes/sessions.js";
+import type { readClaudeDetail } from "./sources/claude/detail.js";
+import type { readCodexDetail } from "./sources/codex/detail.js";
 import type { SessionIndex } from "./store/index.js";
 
 /** `createApp` の依存。 */
 export interface AppDeps {
   /** routes が見てよい索引の操作。sources を直接触らせないため必要な操作だけを渡す。 */
-  index: Pick<SessionIndex, "getAll" | "getAccounts" | "getWarnings" | "isProcessInfoAvailable">;
+  index: Pick<
+    SessionIndex,
+    "getAll" | "get" | "getSource" | "getAccounts" | "getWarnings" | "isProcessInfoAvailable"
+  >;
   config: AppConfig;
   log: Logger;
   /** roots の `~` 置換用のホームディレクトリ。 */
@@ -27,6 +32,9 @@ export interface AppDeps {
   watcherMode?: () => "fs" | "poll" | "both";
   /** 現在時刻。テストでの差し替え用。既定 `() => new Date()`。 */
   now?: () => Date;
+  /** 詳細取得の実処理（テストでフェイク注入する場合に使う）。省略時は実物。 */
+  readClaudeDetail?: typeof readClaudeDetail;
+  readCodexDetail?: typeof readCodexDetail;
 }
 
 /**
@@ -57,7 +65,12 @@ export function createApp(deps: AppDeps): Hono {
     }),
   );
 
-  const sessionsRoute = createSessionsRoute({ index: deps.index, now: deps.now });
+  const sessionsRoute = createSessionsRoute({
+    index: deps.index,
+    now: deps.now,
+    readClaudeDetail: deps.readClaudeDetail,
+    readCodexDetail: deps.readCodexDetail,
+  });
   const accountsRoute = createAccountsRoute({ index: deps.index });
   const healthRoute = createHealthRoute({
     index: deps.index,
