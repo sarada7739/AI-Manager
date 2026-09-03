@@ -10,6 +10,7 @@ import type { AppConfig } from "../config.js";
 import type { Logger } from "../log.js";
 import type { ClaudeSessionFile, LocateClaudeResult } from "../sources/claude/locator.js";
 import { locateClaudeSessions } from "../sources/claude/locator.js";
+import type { MessagingTarget } from "../sources/claude/messaging.js";
 import type { ReadRunningMetaResult, RunningMeta } from "../sources/claude/running.js";
 import { matchRunning, readRunningMeta } from "../sources/claude/running.js";
 import type { CodexSessionFile, LocateCodexResult } from "../sources/codex/locator.js";
@@ -623,7 +624,13 @@ export class SessionIndex {
           pid: derived.pid,
           startedAt: derived.startedAt,
         };
-        this.index.set(key, { ...indexed, summary: updatedSummary });
+        this.index.set(key, {
+          ...indexed,
+          summary: updatedSummary,
+          // 稼働メタが再取得できた場合はパイプの値も更新する（プロセス再起動でパイプ名が
+          // 変わることがあるため。ADR-0009 / T-031）。
+          messagingSocketPath: meta?.messagingSocketPath ?? null,
+        });
         scanned += 1;
       }
     }
@@ -665,6 +672,30 @@ export class SessionIndex {
       return undefined;
     }
     return { tool: indexed.summary.tool, jsonlPath: indexed.jsonlPath };
+  }
+
+  /**
+   * 送信 API（T-031, ADR-0009）用に、指定 key が「今すぐ送信できる Claude の稼働中セッション」かを
+   * 判定し、送信に必要な最小限の情報だけを返す。`tool === "claude"` かつ `state === "running"` かつ
+   * 稼働メタに `messagingSocketPath` があるときだけ値を返す。`SessionSummary` には載せない
+   * （API の一覧には出さない）。
+   */
+  getMessagingTarget(key: string): MessagingTarget | undefined {
+    const indexed = this.index.get(key);
+    if (indexed === undefined) {
+      return undefined;
+    }
+    if (indexed.summary.tool !== "claude" || indexed.summary.state !== "running") {
+      return undefined;
+    }
+    if (indexed.messagingSocketPath === null || indexed.summary.pid === null) {
+      return undefined;
+    }
+    return {
+      root: indexed.root,
+      pid: indexed.summary.pid,
+      socketPath: indexed.messagingSocketPath,
+    };
   }
 
   /** tool（claude → codex）→ label の順に並んだアカウント一覧。 */

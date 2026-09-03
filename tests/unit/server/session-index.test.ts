@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
+import { createApp } from "../../../src/server/app";
 import type { AppConfig } from "../../../src/server/config";
 import { createLogger, type Logger } from "../../../src/server/log";
 import type {
@@ -26,6 +27,7 @@ import {
   TITLE_MAX_CHARS,
   UNTITLED,
 } from "../../../src/server/store/build-summary";
+import { createEventHub } from "../../../src/server/store/events";
 import { SessionIndex, type SessionIndexDeps } from "../../../src/server/store/index";
 import { err, ok, type Result } from "../../../src/shared/result";
 
@@ -1866,5 +1868,361 @@ describe("SessionIndex.rebuild: 重複解消の tie-break（mtime 同値は json
   it("root 配列の並び順を入れ替えても（ROOT_SECOND を先に）結果は変わらない（jsonlPath 昇順のファイルが勝つ）", async () => {
     const summary = await buildWithRootOrder([ROOT_SECOND, ROOT_FIRST]);
     expect(summary?.title).toBe("jsonlPath が辞書順で先の内容");
+  });
+});
+
+// ===========================================================================
+// 12. getMessagingTarget（T-031, ADR-0009）
+// ===========================================================================
+
+describe("SessionIndex.getMessagingTarget", () => {
+  const ID_RUN_WITH_SOCKET = "00000000-0000-4000-8000-0000000000f1";
+  const ID_RUN_NO_SOCKET = "00000000-0000-4000-8000-0000000000f2";
+  const ID_ACTIVE = "00000000-0000-4000-8000-0000000000f3";
+  const ID_IDLE = "00000000-0000-4000-8000-0000000000f4";
+  const ID_CODEX = "00000000-0000-4000-8000-0000000000f5";
+
+  const PROJECT_DIR = path.join(ROOT_CLAUDE, "projects", "dir-messaging");
+  const JSONL_RUN_WITH_SOCKET = path.join(PROJECT_DIR, `${ID_RUN_WITH_SOCKET}.jsonl`);
+  const JSONL_RUN_NO_SOCKET = path.join(PROJECT_DIR, `${ID_RUN_NO_SOCKET}.jsonl`);
+  const JSONL_ACTIVE = path.join(PROJECT_DIR, `${ID_ACTIVE}.jsonl`);
+  const JSONL_IDLE = path.join(PROJECT_DIR, `${ID_IDLE}.jsonl`);
+  const CODEX_DAY_DIR = path.join(ROOT_CODEX, "sessions", "2026", "01", "15");
+  const JSONL_CODEX = path.join(CODEX_DAY_DIR, `rollout-2026-01-15-${ID_CODEX}.jsonl`);
+
+  const NOW_MS = Date.parse("2026-01-15T12:00:00.000Z");
+  const RECENT_MTIME = NOW_MS - 2_000; // activeWindowMinutes(5分)以内
+  const OLD_MTIME = NOW_MS - 60 * 60 * 1000; // 1 時間前 → idle
+  const PROC_START = 1_000_000_000;
+  const PID_WITH_SOCKET = 6001;
+  const PID_NO_SOCKET = 6002;
+  const VALID_SOCKET_PATH = "\\\\.\\pipe\\LOCAL\\cc-msg-0123abcd";
+
+  function headOf(id: string, mtime: number): string[] {
+    return [
+      JSON.stringify({
+        type: "user",
+        timestamp: new Date(mtime).toISOString(),
+        cwd: "C:/synthetic/project",
+        message: { content: `session ${id}` },
+      }),
+    ];
+  }
+
+  function setup() {
+    const config = baseConfig();
+    const { log } = makeLogger(config);
+
+    const runningMetaWithSocket = makeRunningMeta({
+      pid: PID_WITH_SOCKET,
+      sessionId: ID_RUN_WITH_SOCKET,
+      procStart: PROC_START,
+      messagingSocketPath: VALID_SOCKET_PATH,
+    });
+    const runningMetaNoSocket = makeRunningMeta({
+      pid: PID_NO_SOCKET,
+      sessionId: ID_RUN_NO_SOCKET,
+      procStart: PROC_START,
+      messagingSocketPath: null,
+    });
+
+    const processWithSocket = makeProcess({ pid: PID_WITH_SOCKET, creationFileTime: PROC_START });
+    const processNoSocket = makeProcess({ pid: PID_NO_SOCKET, creationFileTime: PROC_START });
+
+    const readers = makeLineReaders({
+      head: {
+        [JSONL_RUN_WITH_SOCKET]: headOf(ID_RUN_WITH_SOCKET, RECENT_MTIME),
+        [JSONL_RUN_NO_SOCKET]: headOf(ID_RUN_NO_SOCKET, RECENT_MTIME),
+        [JSONL_ACTIVE]: headOf(ID_ACTIVE, RECENT_MTIME),
+        [JSONL_IDLE]: headOf(ID_IDLE, OLD_MTIME),
+        [JSONL_CODEX]: [
+          JSON.stringify({
+            timestamp: "2026-01-15T11:59:00.000Z",
+            type: "session_meta",
+            payload: { cwd: "C:/synthetic/codex-project", originator: "codex_cli_rs" },
+          }),
+        ],
+      },
+    });
+
+    const locateClaudeSessions = vi.fn(async (root: string) =>
+      root === ROOT_CLAUDE
+        ? locateClaudeResult([
+            claudeFile({
+              id: ID_RUN_WITH_SOCKET,
+              jsonlPath: JSONL_RUN_WITH_SOCKET,
+              projectDir: PROJECT_DIR,
+              mtime: RECENT_MTIME,
+            }),
+            claudeFile({
+              id: ID_RUN_NO_SOCKET,
+              jsonlPath: JSONL_RUN_NO_SOCKET,
+              projectDir: PROJECT_DIR,
+              mtime: RECENT_MTIME,
+            }),
+            claudeFile({
+              id: ID_ACTIVE,
+              jsonlPath: JSONL_ACTIVE,
+              projectDir: PROJECT_DIR,
+              mtime: RECENT_MTIME,
+            }),
+            claudeFile({
+              id: ID_IDLE,
+              jsonlPath: JSONL_IDLE,
+              projectDir: PROJECT_DIR,
+              mtime: OLD_MTIME,
+            }),
+          ])
+        : emptyClaudeResult(),
+    );
+    const locateCodexSessions = vi.fn(async (root: string) =>
+      root === ROOT_CODEX
+        ? locateCodexResult([
+            codexFile({ id: ID_CODEX, jsonlPath: JSONL_CODEX, mtime: RECENT_MTIME }),
+          ])
+        : emptyCodexResult(),
+    );
+    // 初期状態: 稼働メタは「ソケットあり」「ソケットなし」の 2 件だけ（active / idle は素のまま）。
+    const readRunningMeta = vi.fn(async (root: string) =>
+      root === ROOT_CLAUDE
+        ? runningMetaResult([runningMetaWithSocket, runningMetaNoSocket])
+        : emptyRunningMetaResult(),
+    );
+    const listProcesses = vi.fn(async () =>
+      processesAvailable([processWithSocket, processNoSocket]),
+    );
+
+    const deps: SessionIndexDeps = {
+      locateClaudeSessions,
+      locateCodexSessions,
+      readRunningMeta,
+      listProcesses,
+      now: () => NOW_MS,
+      ...readers,
+    };
+
+    const index = new SessionIndex(config, log, deps);
+    return { index, readRunningMeta, listProcesses };
+  }
+
+  it("running かつ messagingSocketPath ありのセッションは { root, pid, socketPath } を返す", async () => {
+    const { index } = setup();
+    await index.rebuild();
+
+    expect(index.get(`claude:${ID_RUN_WITH_SOCKET}`)?.state).toBe("running");
+    expect(index.getMessagingTarget(`claude:${ID_RUN_WITH_SOCKET}`)).toEqual({
+      root: ROOT_CLAUDE,
+      pid: PID_WITH_SOCKET,
+      socketPath: VALID_SOCKET_PATH,
+    });
+  });
+
+  it("running だが messagingSocketPath が無いセッションは undefined を返す", async () => {
+    const { index } = setup();
+    await index.rebuild();
+
+    expect(index.get(`claude:${ID_RUN_NO_SOCKET}`)?.state).toBe("running");
+    expect(index.getMessagingTarget(`claude:${ID_RUN_NO_SOCKET}`)).toBeUndefined();
+  });
+
+  it("active 状態（稼働メタなし・mtime が新しい）のセッションは undefined を返す", async () => {
+    const { index } = setup();
+    await index.rebuild();
+
+    expect(index.get(`claude:${ID_ACTIVE}`)?.state).toBe("active");
+    expect(index.getMessagingTarget(`claude:${ID_ACTIVE}`)).toBeUndefined();
+  });
+
+  it("idle 状態（稼働メタなし・mtime が古い）のセッションは undefined を返す", async () => {
+    const { index } = setup();
+    await index.rebuild();
+
+    expect(index.get(`claude:${ID_IDLE}`)?.state).toBe("idle");
+    expect(index.getMessagingTarget(`claude:${ID_IDLE}`)).toBeUndefined();
+  });
+
+  it("codex セッションは（稼働中でも）undefined を返す", async () => {
+    const { index } = setup();
+    await index.rebuild();
+
+    expect(index.getMessagingTarget(`codex:${ID_CODEX}`)).toBeUndefined();
+  });
+
+  it("存在しない key は undefined を返す", async () => {
+    const { index } = setup();
+    await index.rebuild();
+
+    expect(index.getMessagingTarget("claude:00000000-0000-4000-8000-000000000000")).toBeUndefined();
+  });
+
+  it("refreshFiles で稼働メタが消えた後は undefined になる（running → idle/active に変わる）", async () => {
+    const { index, readRunningMeta } = setup();
+    await index.rebuild();
+    expect(index.getMessagingTarget(`claude:${ID_RUN_WITH_SOCKET}`)).toBeDefined();
+
+    readRunningMeta.mockImplementation(async () => emptyRunningMetaResult());
+    const sessionsFilePath = path.join(ROOT_CLAUDE, "sessions", `${PID_WITH_SOCKET}.json`);
+    await index.refreshFiles([sessionsFilePath]);
+
+    expect(index.get(`claude:${ID_RUN_WITH_SOCKET}`)?.state).not.toBe("running");
+    expect(index.getMessagingTarget(`claude:${ID_RUN_WITH_SOCKET}`)).toBeUndefined();
+  });
+
+  it("refreshFiles で messagingSocketPath 付きの稼働メタが新たに現れた後は target を返す", async () => {
+    const { index, readRunningMeta, listProcesses } = setup();
+    await index.rebuild();
+    // active セッションは最初は稼働メタが無い（target なし）。
+    expect(index.getMessagingTarget(`claude:${ID_ACTIVE}`)).toBeUndefined();
+
+    const newlyRunningMeta = makeRunningMeta({
+      pid: 7777,
+      sessionId: ID_ACTIVE,
+      procStart: PROC_START,
+      messagingSocketPath: VALID_SOCKET_PATH,
+    });
+    readRunningMeta.mockImplementation(async (root: string) =>
+      root === ROOT_CLAUDE ? runningMetaResult([newlyRunningMeta]) : emptyRunningMetaResult(),
+    );
+    listProcesses.mockImplementation(async () =>
+      processesAvailable([makeProcess({ pid: 7777, creationFileTime: PROC_START })]),
+    );
+
+    const sessionsFilePath = path.join(ROOT_CLAUDE, "sessions", "7777.json");
+    await index.refreshFiles([sessionsFilePath]);
+
+    expect(index.get(`claude:${ID_ACTIVE}`)?.state).toBe("running");
+    expect(index.getMessagingTarget(`claude:${ID_ACTIVE}`)).toEqual({
+      root: ROOT_CLAUDE,
+      pid: 7777,
+      socketPath: VALID_SOCKET_PATH,
+    });
+  });
+
+  it("getAll() / get() が返す SessionSummary に messagingSocketPath は含まれない", async () => {
+    const { index } = setup();
+    await index.rebuild();
+
+    const summary = index.get(`claude:${ID_RUN_WITH_SOCKET}`);
+    expect(summary).toBeDefined();
+    expect(Object.keys(summary ?? {})).not.toContain("messagingSocketPath");
+
+    for (const session of index.getAll()) {
+      expect(Object.keys(session)).not.toContain("messagingSocketPath");
+    }
+  });
+});
+
+// ===========================================================================
+// 13. 回帰: 実物の SessionIndex を createApp にそのまま渡しても送信 API が動く
+// ===========================================================================
+// 実機で発生した不具合の回帰テスト: `src/server/app.ts` がかつて
+// `index: { get: deps.index.get, getMessagingTarget: deps.index.getMessagingTarget }` のように
+// クラスインスタンスからメソッドだけを取り出して渡していたため、メソッド内部の `this` が失われ、
+// `SessionIndex`（クラス、プライベートフィールドに `this` でアクセスする）を渡す実機で
+// POST /api/sessions/:tool/:id/message が 500 になっていた。
+// 現在の app.ts は `index: deps.index` とオブジェクトごと渡すよう修正済みだが、
+// フェイク index（クロージャ関数の集まり）では `this` 依存の問題を検出できないため、
+// 実物の SessionIndex インスタンスを直接 createApp に渡して確認する。
+describe("SessionIndex → createApp（実物のインデックスで送信 API が動く。this 依存バグの回帰）", () => {
+  it("running かつ messagingSocketPath ありの実物 SessionIndex を渡すと、POST .../message が 500 にならず 200 になる", async () => {
+    const ID = "00000000-0000-4000-8000-000000000fa1";
+    const PROJECT_DIR = path.join(ROOT_CLAUDE, "projects", "dir-messaging-regression");
+    const JSONL = path.join(PROJECT_DIR, `${ID}.jsonl`);
+    const NOW_MS = Date.parse("2026-01-15T12:00:00.000Z");
+    const PROC_START = 1_000_000_000;
+    const PID = 6101;
+    const SOCKET_PATH = "\\\\.\\pipe\\LOCAL\\cc-msg-abcdef01";
+
+    const config = baseConfig();
+    const { log } = makeLogger(config);
+    const readers = makeLineReaders({
+      head: {
+        [JSONL]: [
+          line({
+            type: "user",
+            timestamp: new Date(NOW_MS - 2_000).toISOString(),
+            cwd: "C:/synthetic/project",
+            message: { content: "回帰テスト用セッション" },
+          }),
+        ],
+      },
+    });
+
+    const deps: SessionIndexDeps = {
+      locateClaudeSessions: vi.fn(async (root: string) =>
+        root === ROOT_CLAUDE
+          ? locateClaudeResult([
+              claudeFile({
+                id: ID,
+                jsonlPath: JSONL,
+                projectDir: PROJECT_DIR,
+                mtime: NOW_MS - 2_000,
+              }),
+            ])
+          : emptyClaudeResult(),
+      ),
+      locateCodexSessions: vi.fn(async () => emptyCodexResult()),
+      readRunningMeta: vi.fn(async (root: string) =>
+        root === ROOT_CLAUDE
+          ? runningMetaResult([
+              makeRunningMeta({
+                pid: PID,
+                sessionId: ID,
+                procStart: PROC_START,
+                messagingSocketPath: SOCKET_PATH,
+              }),
+            ])
+          : emptyRunningMetaResult(),
+      ),
+      listProcesses: vi.fn(async () =>
+        processesAvailable([makeProcess({ pid: PID, creationFileTime: PROC_START })]),
+      ),
+      now: () => NOW_MS,
+      ...readers,
+    };
+
+    // フェイクではなく実物の SessionIndex インスタンス（クラス、内部で this を使う）。
+    const index = new SessionIndex(config, log, deps);
+    await index.rebuild();
+    expect(index.get(`claude:${ID}`)?.state).toBe("running");
+    expect(index.getMessagingTarget(`claude:${ID}`)).toEqual({
+      root: ROOT_CLAUDE,
+      pid: PID,
+      socketPath: SOCKET_PATH,
+    });
+
+    const hub = createEventHub({ log });
+    // `Result<SendMessageSuccess, SendMessageError>` に構造的に一致するリテラルを直接返す
+    // （この describe ブロックでは messaging.ts の型を追加 import しないための簡略化）。
+    const sendClaudeMessage = vi.fn(async () => ({
+      ok: true as const,
+      value: { sentAt: "2026-01-15T12:00:00.000Z" },
+    }));
+
+    // `index` にはフェイクではなく実物の SessionIndex インスタンスをそのまま渡す。
+    const app = createApp({
+      index,
+      config,
+      log,
+      homeDir: HOME_DIR,
+      version: "9.9.9",
+      hub,
+      refresh: vi.fn(async () => ({ scanned: 0, durationMs: 0, warnings: [] })),
+      readClaudeDetail: async () => ok({ recentMessages: [], parseWarnings: [] }),
+      readCodexDetail: async () => ok({ recentMessages: [], parseWarnings: [] }),
+      sendClaudeMessage,
+      now: () => new Date(NOW_MS),
+    });
+
+    const res = await app.request(`/api/sessions/claude/${ID}/message`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: "本文" }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.ok).toBe(true);
+    expect(sendClaudeMessage).toHaveBeenCalledTimes(1);
   });
 });

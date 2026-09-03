@@ -122,11 +122,151 @@ describe("readRunningMeta: 正常系", () => {
       procStart: 133000000000000000,
       entrypoint: "cli",
       version: "1.2.3",
+      // "\\\\.\\pipe\\synthetic" は cc-msg-<hex> 形式ではないため null になる（T-031）。
+      messagingSocketPath: null,
     });
     expect(byPid.get(1002)?.entrypoint).toBe("claude-desktop");
     expect(byPid.get(1003)?.entrypoint).toBe("unknown");
     expect(byPid.get(1004)?.entrypoint).toBe("unknown");
     expect(byPid.get(1004)?.version).toBeNull();
+  });
+});
+
+// T-031: messagingSocketPath は `\\.\pipe\LOCAL\cc-msg-<hex>` 形式のときだけ採用し、
+// それ以外・欠落・非文字列は null にする。メタ自体は不正にしない（他のフィールドは正しく読める）。
+describe("readRunningMeta: messagingSocketPath の解析（ADR-0009 / T-031）", () => {
+  let root: string | undefined;
+
+  afterEach(async () => {
+    if (root !== undefined) {
+      await rm(root, { recursive: true, force: true });
+      root = undefined;
+    }
+  });
+
+  it("正しい形式（\\\\.\\pipe\\LOCAL\\cc-msg-<16進>）は採用され、メタ全体も有効なまま", async () => {
+    const created = await makeRoot("ai-manager-claude-running-socket-ok-");
+    root = created.root;
+    const { sessionsDir } = created;
+
+    await writeMeta(sessionsDir, "7001.json", {
+      pid: 7001,
+      sessionId: SID1,
+      cwd: "C:\\synthetic\\project",
+      startedAt: 1,
+      procStart: 1,
+      messagingSocketPath: "\\\\.\\pipe\\LOCAL\\cc-msg-0123abcdef",
+    });
+
+    const result = await readRunningMeta(root);
+
+    expect(result.warnings).toEqual([]);
+    expect(result.metas).toHaveLength(1);
+    expect(result.metas[0]?.messagingSocketPath).toBe("\\\\.\\pipe\\LOCAL\\cc-msg-0123abcdef");
+  });
+
+  it("\\\\.\\pipe\\ 前置きでない場合は null（メタ自体は有効なまま）", async () => {
+    const created = await makeRoot("ai-manager-claude-running-socket-badprefix-");
+    root = created.root;
+    const { sessionsDir } = created;
+
+    await writeMeta(sessionsDir, "7002.json", {
+      pid: 7002,
+      sessionId: SID1,
+      cwd: "C:\\synthetic\\project",
+      startedAt: 1,
+      procStart: 1,
+      messagingSocketPath: "\\\\some\\other\\path\\cc-msg-0123abcd",
+    });
+
+    const result = await readRunningMeta(root);
+
+    expect(result.warnings).toEqual([]);
+    expect(result.metas).toHaveLength(1);
+    expect(result.metas[0]?.messagingSocketPath).toBeNull();
+  });
+
+  it("cc-msg- 前置きでない場合は null（メタ自体は有効なまま）", async () => {
+    const created = await makeRoot("ai-manager-claude-running-socket-badname-");
+    root = created.root;
+    const { sessionsDir } = created;
+
+    await writeMeta(sessionsDir, "7003.json", {
+      pid: 7003,
+      sessionId: SID1,
+      cwd: "C:\\synthetic\\project",
+      startedAt: 1,
+      procStart: 1,
+      messagingSocketPath: "\\\\.\\pipe\\LOCAL\\other-name-0123abcd",
+    });
+
+    const result = await readRunningMeta(root);
+
+    expect(result.warnings).toEqual([]);
+    expect(result.metas).toHaveLength(1);
+    expect(result.metas[0]?.messagingSocketPath).toBeNull();
+  });
+
+  it("末尾が 16 進以外の文字を含む場合は null（メタ自体は有効なまま）", async () => {
+    const created = await makeRoot("ai-manager-claude-running-socket-nonhex-");
+    root = created.root;
+    const { sessionsDir } = created;
+
+    await writeMeta(sessionsDir, "7004.json", {
+      pid: 7004,
+      sessionId: SID1,
+      cwd: "C:\\synthetic\\project",
+      startedAt: 1,
+      procStart: 1,
+      messagingSocketPath: "\\\\.\\pipe\\LOCAL\\cc-msg-XYZ123",
+    });
+
+    const result = await readRunningMeta(root);
+
+    expect(result.warnings).toEqual([]);
+    expect(result.metas).toHaveLength(1);
+    expect(result.metas[0]?.messagingSocketPath).toBeNull();
+  });
+
+  it("フィールド自体が欠落している場合は null（メタ自体は有効なまま）", async () => {
+    const created = await makeRoot("ai-manager-claude-running-socket-missing-");
+    root = created.root;
+    const { sessionsDir } = created;
+
+    await writeMeta(sessionsDir, "7005.json", {
+      pid: 7005,
+      sessionId: SID1,
+      cwd: "C:\\synthetic\\project",
+      startedAt: 1,
+      procStart: 1,
+    });
+
+    const result = await readRunningMeta(root);
+
+    expect(result.warnings).toEqual([]);
+    expect(result.metas).toHaveLength(1);
+    expect(result.metas[0]?.messagingSocketPath).toBeNull();
+  });
+
+  it("非文字列（数値）の場合は null（メタ自体は有効なまま）", async () => {
+    const created = await makeRoot("ai-manager-claude-running-socket-nonstring-");
+    root = created.root;
+    const { sessionsDir } = created;
+
+    await writeMeta(sessionsDir, "7006.json", {
+      pid: 7006,
+      sessionId: SID1,
+      cwd: "C:\\synthetic\\project",
+      startedAt: 1,
+      procStart: 1,
+      messagingSocketPath: 12345,
+    });
+
+    const result = await readRunningMeta(root);
+
+    expect(result.warnings).toEqual([]);
+    expect(result.metas).toHaveLength(1);
+    expect(result.metas[0]?.messagingSocketPath).toBeNull();
   });
 });
 

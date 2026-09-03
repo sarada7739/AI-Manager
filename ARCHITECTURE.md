@@ -19,6 +19,7 @@
 - **クライアント**（React + Vite）は API 経由でしかデータに触れない。ファイルパスを組み立てない。
 - **永続化なし**。起動時に全走査し、以後は差分更新。
 - **第 1 段階に書き込み系 API は存在しない**。`POST /api/refresh`（再走査の要求）のみ副作用を持つが、ファイルシステムには書かない。
+- **第 2 段階**で書き込み系 API `POST /api/sessions/:tool/:id/message`（指示送信）を追加した（ADR-0009、T-031）。
 
 ## 2. ディレクトリと責務
 
@@ -41,7 +42,8 @@ src/
         locator.ts              projects/<dir>/<sessionId>.jsonl と付随ファイルの列挙（stat / readdir のみ。sessions/*.json は running.ts）
         parser.ts               JSONL のヘッダ / テイル解析 → SessionSummary 断片
         detail.ts               詳細取得（末尾 N メッセージ。マスク適用）
-        running.ts              sessions/<pid>.json の読込と検証
+        running.ts              sessions/<pid>.json の読込と検証（messagingSocketPath の形式検証を含む）
+        messaging.ts            名前付きパイプへの指示送信（F-7, ADR-0009）。sessions/*.key を読む唯一の経路
       codex/
         locator.ts              sessions/YYYY/MM/DD/rollout-*.jsonl の列挙
         parser.ts               rollout の解析 → SessionSummary 断片
@@ -62,6 +64,7 @@ src/
       accounts.ts               GET /api/accounts
       events.ts                 GET /api/events（SSE）, POST /api/refresh
       health.ts                 GET /api/health
+      message.ts                POST /api/sessions/:tool/:id/message（F-7, ADR-0009。Codex は 400）
   client/
     main.tsx                    エントリ
     app/                        App.tsx（全 feature の配線、URL 同期、自動更新）, Layout, Header。キーボード操作は各 feature（board / list の矢印キー、session-detail の Esc）が持つ
@@ -174,6 +177,7 @@ interface Account {
 | GET | `/api/accounts` | `{ accounts: Account[] }` | |
 | GET | `/api/events` | SSE: `sessions-changed`（`{ changed, at }`。`changed` は全走査時は走査件数）, `heartbeat`（30 秒）。接続直後に heartbeat を 1 回 | |
 | POST | `/api/refresh` | `{ ok, scanned, durationMs }` | 全走査を再実行 |
+| POST | `/api/sessions/:tool/:id/message` | `{ ok, sentAt, note }` | F-7（ADR-0009）。Claude の稼働中セッション宛のみ。Codex は 400 `unsupported_tool`。本文 `{ text: string }`（1〜4,000 文字）、10 秒/セッションのレート制限（同時送信・失敗も数える）、10 分以内に投函できた本文と同一の本文は拒否。成功は「投函できた」の意味で、配信 / 保留は受信側の `crossSessionInbound` に従う |
 
 エラー応答は `{ error: { code, message, hint } }`。`message` は「何が起きたか」、`hint` は「次にどうするか」。
 
@@ -202,7 +206,12 @@ useSessionStore
 
 - 読み取り対象は `config.roots` 配下のみ。`safe-path.ts` が `path.resolve` 後に root との前方一致（大文字小文字無視）を検証する。
 - **読まないファイル**: `.credentials.json`, `auth.json`, `sessions/*.key`, `*.sqlite*`, `settings*.json`。locator で明示的に除外する。
-- 外部通信なし。フォント・スクリプトの CDN 読み込みもしない。
+  **唯一の例外**は `sources/claude/messaging.ts`（ADR-0009 の送信時のみ）。`sessions/<pid>.<64 hex>.key` の
+  形式に一致するファイルだけを対象に `peerToken` を読み、認証行の組み立てにのみ使う。値は戻り値・ログ・
+  エラーに一切含めず、送信処理のスコープを出た時点で保持しない。`isExcludedFile` の `*.key` 除外は
+  この 1 経路にだけ適用しない（他の全経路は従来どおり除外する）。
+- 外部通信なし（`messaging.ts` が接続する名前付きパイプは同一マシン上の Claude Code プロセスであり、
+  外部ネットワーク通信ではない）。フォント・スクリプトの CDN 読み込みもしない。
 - 秘密情報らしき文字列は `masking.ts` でマスクしてから API に載せる（UI ではなくサーバでマスク）。
 - ログ（`log.ts`）にセッション本文・実パスを出さない。パスはハッシュ化または `~` 置換で出す。
 - 子プロセスは `process/list.ts` の固定コマンド（固定引数の PowerShell 1 本。stdout は UTF-8 に固定）のみ。ユーザー入力を渡さない。
@@ -218,5 +227,5 @@ useSessionStore
 
 ## 9. 第 2 段階（F-7）に向けた拡張点
 
-- `server/routes/compose.ts`（未実装）。追加時は `readOnly` が false のときだけ受け付け、ADR で承認された送信経路のみを使う。
-- `client/features/compose/` は UI だけ先に置き、`disabled` と理由文言を持つ。
+- `server/routes/message.ts`（T-031 で実装）。`readOnly` の判定はクライアント側（`ComposeBox` の有効化）で行い、サーバ側は ADR-0009 で承認された送信経路（`sources/claude/messaging.ts`）のみを使う。
+- `client/features/compose/` は UI だけ先に置き、`disabled` と理由文言を持つ（T-032 で有効化・確認ダイアログを追加予定）。

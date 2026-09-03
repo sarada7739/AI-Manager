@@ -1,9 +1,9 @@
 # TASKS.md — タスク台帳（進捗の唯一の真実）
 
 ## 進捗サマリ
-- 全 33 件 / 完了 30 件 / 進行中 1 件 / 未着手 2 件
-- 現在のタスク: T-031（送信 API と名前付きパイプのアダプタ。T-030 で投函形式を確定済み: RESEARCH.md §6.2a）
-- 最終更新: 2026-09-04T02:00:00+09:00
+- 全 33 件 / 完了 31 件 / 進行中 1 件 / 未着手 1 件
+- 現在のタスク: T-032（ComposeBox の有効化と送信前確認ダイアログ。サーバ側 API は T-031 で実機確認済み）
+- 最終更新: 2026-09-04T04:30:00+09:00
 
 ## フェーズ進捗
 
@@ -52,8 +52,8 @@
 | T-028 | 詳細パネルで直近メッセージが 0 件のときの案内表示 | T-025 | done | 2 | #31 |
 | T-029 | 配色をインディゴ基調に変更（光彩・グラデーション・見出し書体） | T-016 | done | 3 | #32 |
 | T-030 | F-7 検証スパイク（パイプの認証・メッセージ形式、codex queue の到達性） | T-010 | done | 1 | #35 |
-| T-031 | 送信 API と名前付きパイプのアダプタ（サーバ。Codex は対象外） | T-030 | in_progress | 1 | - |
-| T-032 | ComposeBox の有効化と送信前確認ダイアログ（クライアント） | T-031 | todo | 0 | - |
+| T-031 | 送信 API と名前付きパイプのアダプタ（サーバ。Codex は対象外） | T-030 | done | 3 | #36 |
+| T-032 | ComposeBox の有効化と送信前確認ダイアログ（クライアント） | T-031 | in_progress | 1 | - |
 | T-033 | 送信の E2E と README / ARCHITECTURE の更新 | T-032 | todo | 0 | - |
 
 依存グラフは DAG（循環なし）。実行順は ID 順で依存を満たす。
@@ -431,12 +431,12 @@
 ### T-031 送信 API と名前付きパイプのアダプタ（サーバ。Codex は対象外）
 - **目的**: `POST /api/sessions/:tool/:id/message` を追加し、Claude の稼働中セッションへ名前付きパイプで送る。Codex 宛は 400（「Codex への送信は未対応」+ 理由）を返す（ADR-0009 の 2026-09-04 追記）
 - **受け入れ条件**:
-  - [ ] 宛先は索引の `running` セッションだけ。`sessionId` / `pid` / `messagingSocketPath` は同一の `sessions/<pid>.json` 由来で、パイプ名は `\.\pipe\LOCAL\cc-msg-` 前置きの厳密一致
-  - [ ] `.key` は送信時にだけ読み、メモリに保持せず、応答・ログ・エラー・テストに値を出さない。読む対象は `sessions/<pid>.<64 hex>.key` 形式のみ（`isExcludedFile` の例外を ARCHITECTURE.md §7 に明記）
-  - [ ] 本文 1〜4,000 文字、1 セッションあたり 10 秒に 1 件、同一本文の連投は 400 で拒否
-  - [ ] 失敗時の応答は「何が起きたか + 次にどうするか」（受信側が保留した場合はその旨）
-  - [ ] 送る行は RESEARCH.md §6.2a の形式（認証行 + `type: "user"` の 1 行）。`from` は `"ai-manager"` 固定
-  - [ ] ログは件数と成否のみ。本文・パイプ名・実パスを出さない
+  - [x] 宛先は索引の `running` セッションだけ。`sessionId` / `pid` / `messagingSocketPath` は同一の `sessions/<pid>.json` 由来で、パイプ名は `\.\pipe\LOCAL\cc-msg-` 前置きの厳密一致
+  - [x] `.key` は送信時にだけ読み、メモリに保持せず、応答・ログ・エラー・テストに値を出さない。読む対象は `sessions/<pid>.<64 hex>.key` 形式のみ（`isExcludedFile` の例外を ARCHITECTURE.md §7 に明記）
+  - [x] 本文 1〜4,000 文字、1 セッションあたり 10 秒に 1 件、同一本文の連投は 400 で拒否
+  - [x] 失敗時の応答は「何が起きたか + 次にどうするか」（受信側が保留した場合はその旨）
+  - [x] 送る行は RESEARCH.md §6.2a の形式（認証行 + `type: "user"` の 1 行）。`from` は `"ai-manager"` 固定
+  - [x] ログは件数と成否のみ。本文・パイプ名・実パスを出さない
 - **参照**: ADR-0009 / ARCHITECTURE.md §5, §7 / CLAUDE.md §4
 - **触ってよい範囲**: `src/server/sources/claude/messaging.ts`（新規）, `src/server/routes/**`, `src/shared/**`（型のみ）, `ARCHITECTURE.md`, `tests/unit/server/**`, `tests/integration/**`
 

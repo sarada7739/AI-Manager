@@ -11,8 +11,10 @@ import type { Logger } from "./log.js";
 import { createAccountsRoute } from "./routes/accounts.js";
 import { createEventsRoute } from "./routes/events.js";
 import { createHealthRoute } from "./routes/health.js";
+import { createMessageRoute } from "./routes/message.js";
 import { createSessionsRoute } from "./routes/sessions.js";
 import type { readClaudeDetail } from "./sources/claude/detail.js";
+import type { sendClaudeMessage as SendClaudeMessageFn } from "./sources/claude/messaging.js";
 import type { readCodexDetail } from "./sources/codex/detail.js";
 import type { EventHub } from "./store/events.js";
 import type { RebuildResult, SessionIndex } from "./store/index.js";
@@ -22,7 +24,13 @@ export interface AppDeps {
   /** routes が見てよい索引の操作。sources を直接触らせないため必要な操作だけを渡す。 */
   index: Pick<
     SessionIndex,
-    "getAll" | "get" | "getSource" | "getAccounts" | "getWarnings" | "isProcessInfoAvailable"
+    | "getAll"
+    | "get"
+    | "getSource"
+    | "getAccounts"
+    | "getWarnings"
+    | "isProcessInfoAvailable"
+    | "getMessagingTarget"
   >;
   config: AppConfig;
   log: Logger;
@@ -37,6 +45,8 @@ export interface AppDeps {
   /** 詳細取得の実処理。sources を直接 import しないため、呼び出し側（index.ts）が実物を渡す。 */
   readClaudeDetail: typeof readClaudeDetail;
   readCodexDetail: typeof readCodexDetail;
+  /** 指示送信（T-031, ADR-0009）の実処理。sources を直接 import しないため、呼び出し側（index.ts）が実物を渡す。 */
+  sendClaudeMessage: typeof SendClaudeMessageFn;
   /** SSE 配信ハブ（T-015）。呼び出し側（index.ts、またはテスト）が実物を渡す。 */
   hub: EventHub;
   /** 直列化済みの再走査（T-015）。呼び出し側（index.ts、またはテスト）が実物を渡す。 */
@@ -78,6 +88,17 @@ export function createApp(deps: AppDeps): Hono {
     readCodexDetail: deps.readCodexDetail,
   });
   const accountsRoute = createAccountsRoute({ index: deps.index });
+
+  // 送信 API（T-031, ADR-0009）。索引の getMessagingTarget と送信の実処理は他の routes と同じく必須の依存。
+  const depsNow = deps.now;
+  // index はクラスインスタンス（SessionIndex）なので、メソッドを取り出して渡すと this が失われる。
+  // 他の routes と同じくオブジェクトごと渡す（実機で 500 になった不具合の修正）。
+  const messageRoute = createMessageRoute({
+    index: deps.index,
+    sendClaudeMessage: deps.sendClaudeMessage,
+    now: depsNow ? () => depsNow().getTime() : undefined,
+    log: deps.log,
+  });
   const healthRoute = createHealthRoute({
     index: deps.index,
     config: deps.config,
@@ -96,6 +117,7 @@ export function createApp(deps: AppDeps): Hono {
   app.route("/api", accountsRoute);
   app.route("/api", healthRoute);
   app.route("/api", eventsRoute);
+  app.route("/api", messageRoute);
 
   app.notFound((c) =>
     c.json(

@@ -3,8 +3,8 @@
 // 判定そのもの（running / active / idle への変換）は `src/shared/state.ts` の `resolveState` が行うため、
 // 本ファイルからは呼ばない。
 //
-// docs/RESEARCH.md §2.2 のスキーマ実測結果に基づく。`.key` ファイルは開かない
-// （ARCHITECTURE.md §7「読まないファイル: sessions/*.key」）。
+// docs/RESEARCH.md §2.2 のスキーマ実測結果に基づく。`.key` ファイルは running.ts では開かない。
+// 開くのは messaging.ts の 1 経路だけ（ARCHITECTURE.md §7、ADR-0009 の送信時のみ）。
 
 import type { Dirent, Stats } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
@@ -27,6 +27,15 @@ export interface RunningMeta {
   procStart: number;
   entrypoint: Entrypoint;
   version: string | null;
+  /**
+   * 名前付きパイプのパス（`\\.\pipe\LOCAL\cc-msg-<hex>` 形式に一致するときのみ）。
+   * 形式に一致しない・欠落している場合は null（メタ自体は不正にしない）。
+   * ADR-0009 の送信先特定にのみ使う。値そのものはログに出さない。
+   * プロパティ自体は任意にしている（`parseRunningMeta` は必ず設定するが、既存テストの
+   * フィクスチャに新規フィールドの追加を強いないための設計。省略時は `undefined` を
+   * `null` と同様に「送信先なし」として扱う）。
+   */
+  messagingSocketPath?: string | null;
 }
 
 /** `readRunningMeta` の結果。 */
@@ -40,6 +49,9 @@ const SESSION_FILE_NAME_PATTERN = /^(\d+)\.json$/;
 
 /** UUID 形式（大文字小文字無視）。 */
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** `messagingSocketPath` の形式（ADR-0009 / RESEARCH.md §6.2a）。これ以外は null にする。 */
+const MESSAGING_SOCKET_PATH_PATTERN = /^\\\\\.\\pipe\\LOCAL\\cc-msg-[0-9a-f]+$/;
 
 /** メタファイルの想定サイズ上限（数 KB のはずなので余裕を持って 256 KiB）。 */
 const MAX_META_FILE_BYTES = 256 * 1024;
@@ -70,7 +82,8 @@ function parseEntrypoint(value: string | undefined): Entrypoint {
  * JSON をパース済みの値から `RunningMeta` を組み立てる。
  * 型が揃わないもの、`filePid`（ファイル名の `<pid>`）と JSON 内の `pid` が一致しないものは
  * 不正として undefined を返す（別プロセスのメタを誤って採用しないため）。
- * `messagingSocketPath` などの他フィールドは読まない。
+ * `messagingSocketPath` は形式が一致する場合のみ採用し（不一致・欠落は null）、それ以外の
+ * フィールドは読まない。`messagingSocketPath` が不正でもメタ全体は不正にしない。
  */
 function parseRunningMeta(value: unknown, filePid: number): RunningMeta | undefined {
   if (!isRecord(value)) {
@@ -107,6 +120,13 @@ function parseRunningMeta(value: unknown, filePid: number): RunningMeta | undefi
     return undefined;
   }
 
+  const rawMessagingSocketPath = asString(value, "messagingSocketPath");
+  const messagingSocketPath =
+    rawMessagingSocketPath !== undefined &&
+    MESSAGING_SOCKET_PATH_PATTERN.test(rawMessagingSocketPath)
+      ? rawMessagingSocketPath
+      : null;
+
   return {
     pid,
     sessionId: rawSessionId.toLowerCase(),
@@ -115,6 +135,7 @@ function parseRunningMeta(value: unknown, filePid: number): RunningMeta | undefi
     procStart,
     entrypoint: parseEntrypoint(asString(value, "entrypoint")),
     version: asString(value, "version") ?? null,
+    messagingSocketPath,
   };
 }
 
