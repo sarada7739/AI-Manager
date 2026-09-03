@@ -1,9 +1,9 @@
 # TASKS.md — タスク台帳（進捗の唯一の真実）
 
 ## 進捗サマリ
-- 全 26 件 / 完了 26 件 / 進行中 0 件 / 未着手 0 件
-- 現在のタスク: **すべて完了**（Phase 4 最終レビュー済み。docs/FINAL_REVIEW.md 参照）
-- 最終更新: 2026-09-03T18:15:00+09:00
+- 全 29 件 / 完了 28 件 / 進行中 0 件 / 未着手 1 件
+- 現在のタスク: T-029（配色をインディゴ基調に変更。利用者提示の参考画像に合わせ、ADR-0008 で DESIGN.md を改訂してから implementer → tester → reviewer）
+- 最終更新: 2026-09-03T21:30:00+09:00
 
 ## フェーズ進捗
 
@@ -47,6 +47,9 @@
 | T-024 | リスト表示（テーブル・並べ替え・仮想スクロール） | T-021 | done | 3 | #26 |
 | T-025 | 詳細パネル・指示入力欄（無効）・自動更新・キーボード操作 | T-014, T-015, T-023, T-024 | done | 2 | #28 |
 | T-026 | E2E と README | T-022, T-025 | done | 3 | #29 |
+| T-027 | 稼働メタの procStart が文字列でも読めるようにする | T-010 | done | 2 | #31 |
+| T-028 | 詳細パネルで直近メッセージが 0 件のときの案内表示 | T-025 | done | 2 | #31 |
+| T-029 | 配色をインディゴ基調に変更（光彩・グラデーション・見出し書体） | T-016 | todo | 0 | - |
 
 依存グラフは DAG（循環なし）。実行順は ID 順で依存を満たす。
 
@@ -376,3 +379,34 @@
 - **T-001 レビューからの引き継ぎ**: `playwright.config.ts` の `baseURL` は Hono のポートを指しているが静的配信をしていない。`webServer` でサーバとクライアントを起動する形に見直す
 - **T-026 レビューからの引き継ぎ（Phase 4）**: README のトラブルシュートに E2E 関連（`pnpm exec playwright install chromium` 未実行時の症状、`pnpm e2e` が `local-data/e2e/` を毎回削除・再生成すること）を追記する。`README.md` の「Node.js 22 以上」は推定（`engines.node` を入れるなら揃える）。`vite.config.ts` の `/api` プロキシは API パスの正規表現に限定（`src/client/api/` と衝突するため。ARCHITECTURE §5 に API を足すときはここも更新）。`AI_MANAGER_CONFIG_PATH` はローカル環境変数で `config.json` と同じ信頼境界（`AppConfig.roots` の JSDoc に環境変数経路も追記候補）。DESIGN.md §5.1 のヘッダ帯 sticky の差分は T-025 引き継ぎと合わせて ADR 化
 
+### T-027 稼働メタの procStart が文字列でも読めるようにする
+- **目的**: 実機確認（`pnpm dev`）で「0 稼働」になり、`/api/health` の警告に「稼働メタ 4 件が不正」と出た。実機の `sessions/<pid>.json` は `procStart` を 2^53 超のため数字の文字列で書いており、Phase 0 の記録（数値）と食い違っていた（harness §9.2-4 相当だが影響は 1 フィールドの型のみ）
+- **受け入れ条件**:
+  - [x] `readRunningMeta` が `procStart` を数値・数字文字列のどちらでも受け付け、それ以外（空文字・`0x10`・非数字）は不正として警告に数える
+  - [x] `matchRunning` が文字列由来の `procStart` でも 1 秒の許容差で一致を判定する
+  - [x] RESEARCH.md §2.2 に実機の形を追記する
+  - [x] 実機で `pnpm dev` を起動し `/api/health` の警告が消え、稼働中セッションが「N 稼働」と表示される
+- **参照**: RESEARCH.md §2.2 / ADR-0003 / T-010
+- **触ってよい範囲**: `src/server/sources/claude/running.ts`, `docs/RESEARCH.md`, `tests/unit/server/claude-running.test.ts`
+
+### T-028 詳細パネルで直近メッセージが 0 件のときの案内表示
+- **目的**: 実機確認で、ツール実行が続いているセッション（末尾 256KB がツールの入出力だけ）の詳細パネルが「最近のメッセージ」見出しだけで空になり、理由が分からなかった
+- **受け入れ条件**:
+  - [x] `recentMessages` が 0 件（取得成功）のとき、見出しの下に「直近のログに表示できる発言がありません。…」の案内（`--color-text-3`、`--text-sm`）を出す。取得中・失敗時は出さない
+  - [x] 1 件以上あるときは案内を出さない
+- **参照**: DESIGN.md §6.8, §8 / ARCHITECTURE.md §4.3
+- **触ってよい範囲**: `src/client/features/session-detail/**`, `tests/unit/client/features/session-detail/**`
+- **T-027 / T-028 レビューからの引き継ぎ**: 文言は DESIGN.md §8「何が起きたか + 次にどうするか」を満たすこと（Round 1 で BLOCKING）。`readRunningMeta` → `matchRunning` の合成経路は 2^53 超の奇数値で回帰テスト済み。RESEARCH.md のスキーマ記述と実機のずれを検出する手段は FINAL_REVIEW.md §4 に改善候補として記載
+
+### T-029 配色をインディゴ基調に変更（光彩・グラデーション・見出し書体）
+- **目的**: 利用者から「添付画像のような色合いに変更してほしい。パネルの位置やレイアウトは変えなくてよく、フォント・色の光り方・グラデーションに着目してほしい」との指示。ADR-0008 で DESIGN.md §1 / §2 / §3 / §4.3 / §9 を改訂し、実装をそれに合わせる
+- **受け入れ条件**:
+  - [ ] `tokens.css` が DESIGN.md §9（改訂後）と完全一致する（`design-tokens.test.ts` が pass）
+  - [ ] ページ背景に `--gradient-page`、カード / パネルに `--gradient-surface` が適用される
+  - [ ] 稼働中のカード・列ヘッダ・ドット・アカウントチップに `--glow-signal` / `--glow-signal-dot` の光彩が付き、停止 / 作業中には付かない
+  - [ ] ページタイトル「AI-Manager」が `--font-display` / `--text-2xl` / `--glow-title` で描画される
+  - [ ] `primary` ボタンの背景が `--gradient-primary`、`Toggle` ON が `--color-signal` 系である
+  - [ ] CSS Modules に生の hex / px / rgba を書かない（光彩・グラデーションはトークン経由のみ）
+  - [ ] レイアウト・余白・角丸・状態の形とラベル・キーボード操作は変えない。既存テスト（1500 件超）と E2E が pass
+- **参照**: ADR-0008 / DESIGN.md §1, §2, §3, §4.3, §6, §9
+- **触ってよい範囲**: `src/client/styles/tokens.css`, `src/client/styles/global.css`, `src/client/**/*.module.css`（レイアウトに関わる宣言は変えない）、`tests/unit/client/**`（tester）。DESIGN.md / ADR はメインが先に更新する
