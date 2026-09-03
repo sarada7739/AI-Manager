@@ -1,9 +1,9 @@
 # TASKS.md — タスク台帳（進捗の唯一の真実）
 
 ## 進捗サマリ
-- 全 26 件 / 完了 17 件 / 進行中 5 件 / 未着手 4 件
-- 現在のタスク: T-015（第 2 段階の配線）/ T-019（Round 2）/ T-020 / T-021 / T-022（レビュー中）
-- 最終更新: 2026-09-03T12:25:00+09:00
+- 全 26 件 / 完了 18 件 / 進行中 4 件 / 未着手 4 件
+- 現在のタスク: T-015（第 2 段階 + Round 2）/ T-020（APPROVE、PR 待ち）/ T-021（レビュー中）/ T-022（Round 2）
+- 最終更新: 2026-09-03T12:35:00+09:00
 
 ## フェーズ進捗
 
@@ -39,7 +39,7 @@
 | T-016 | デザイントークンとグローバルスタイル | T-001 | done | 1 | #9 |
 | T-017 | 汎用 UI コンポーネント | T-016 | done | 1 | #14 |
 | T-018 | グルーピング・絞り込み・並べ替えの純粋関数 | T-002, T-005 | done | 3 | #11 |
-| T-019 | クライアント基盤（API クライアント / ストア / URL 同期） | T-013, T-018 | in_progress | 2 | - |
+| T-019 | クライアント基盤（API クライアント / ストア / URL 同期） | T-013, T-018 | done | 2 | #21 |
 | T-020 | App シェルとヘッダ帯 | T-017, T-019 | review | 1 | - |
 | T-021 | フィルタバーと読み取り専用トグル | T-020 | review | 1 | - |
 | T-022 | アカウント帯 | T-020 | review | 1 | - |
@@ -281,13 +281,14 @@
 ### T-019 クライアント基盤（API クライアント / ストア / URL 同期）
 - **目的**: 画面が共通で使う状態と通信
 - **受け入れ条件**:
-  - [ ] `api/client.ts` が `getSessions`, `getAccounts`, `getSession(tool, id)`, `getHealth`, `postRefresh` を持ち、HTTP エラーを `ApiError`（message + hint）に変換する
-  - [ ] `store/useSessionStore.ts` が ARCHITECTURE.md §6 の状態と `load()`, `refresh()`, `setView`, `setGroupBy`, `setFilter`, `setSort`, `select`, `setReadOnly` を持つ。`readOnly` の既定は `true`
-  - [ ] `store/url-sync.ts` が `view`, `groupBy`, `filters` を URL クエリと双方向同期する（初期化時に URL → ストア、変更時にストア → `history.replaceState`）
-  - [ ] 派生データ（絞り込み後・グループ後）はセレクタ関数として提供し、ストアに保存しない
-  - [ ] fetch 失敗時は `status.error` に `ApiError` を入れ、既存データは保持する
+  - [x] `api/client.ts` が `getSessions`, `getAccounts`, `getSession(tool, id)`, `getHealth`, `postRefresh` を持ち、HTTP エラーを `ApiError`（message + hint）に変換する
+  - [x] `store/useSessionStore.ts` が ARCHITECTURE.md §6 の状態と `load()`, `refresh()`, `setView`, `setGroupBy`, `setFilter`, `setSort`, `select`, `setReadOnly` を持つ。`readOnly` の既定は `true`
+  - [x] `store/url-sync.ts` が `view`, `groupBy`, `filters` を URL クエリと双方向同期する（初期化時に URL → ストア、変更時にストア → `history.replaceState`）
+  - [x] 派生データ（絞り込み後・グループ後）はセレクタ関数として提供し、ストアに保存しない
+  - [x] fetch 失敗時は `status.error` に `ApiError` を入れ、既存データは保持する
 - **参照**: ARCHITECTURE.md §5, §6
 - **触ってよい範囲**: `src/client/api/**`, `src/client/store/**`
+- **T-019 レビューからの引き継ぎ（T-020 以降 / T-025 / T-026）**: セレクタ（`selectFilteredSessions` / `selectGroups` / `selectSortedSessions` / `selectCounts`）は毎回新しい配列を返すので `useSessionStore(selector)` に渡さず必ず `useMemo` で使い、`nowMs` は分単位に丸めた値を明示的に渡して依存配列に含める（ヘッダの 1 分時計を `useNowMinute()` 相当の単一供給源にしてボード / リスト / 件数で共有）。全呼び出し側が渡すようになったら `nowMs` の既定値 `Date.now()` を外す。`popstate`（戻る / 進む）は未対応。`networkError` の hint「pnpm dev で…」は README の起動手段と揃える（T-026）。`refresh_failed` は固定文言なのでサーバ固有の message を包む余地あり。`ApiClient` の実装は例外を投げない契約（`runLoad` が前提にしている）
 
 ### T-020 App シェルとヘッダ帯
 - **目的**: ページ骨格、ボード / リスト切替、更新ボタン、件数表示
