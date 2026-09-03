@@ -80,3 +80,50 @@ CLAUDE.md と AGENTS.md は Phase 1 以降変更しておらず、規約と実�
 
 - RESEARCH.md §6 のとおり、名前付きパイプ `cc-msg-<hash>` のプロトコルは未公開で `.key` を読む必要がある可能性が高い（harness §9.2-2）。`--resume` 再実行は課金と JSONL 並行書き込みのリスクがある（§9.2-3）。
 - 着手前に ADR を起票して人間の承認を得る。UI は `ComposeBox` が無効状態で配置済み。
+
+---
+
+# 第 2 段階レビュー（F-7 指示送信）
+
+- 実施日: 2026-09-04
+- 実施者: メインセッション（Claude Fable 5.1）
+- 対象: `main`（PR #38 マージ後、commit `29ca0b4`）
+- 判定: **指摘なし（完了）**。ADR-0009 の承認（利用者、2026-09-04）に基づき F-7 を Claude 専用で実装した。
+
+## 7. 実装した範囲
+
+| タスク | PR | 内容 |
+|---|---|---|
+| T-030 | #35 | 検証スパイク。`sessions/<pid>.<sha256>.key` は JSON（`peerToken`）、投函形式は認証行 + `type:"user"` 行（RESEARCH.md §6.2a）。自動モードの対話セッションへ配信を実機確認 |
+| T-031 | #36 | 送信 API `POST /api/sessions/:tool/:id/message` と名前付きパイプのアダプタ。Claude の稼働中セッション宛のみ、Codex は 400。レート制限・同一本文の拒否・code ごとの hint。reviewer 3 ラウンド |
+| T-032 | #37 | `ComposeBox` の有効化と確認ダイアログ `Dialog`。読み取り専用 OFF + 確認ダイアログの 2 段階。宛先は稼働中の Claude のみ。reviewer 2 ラウンド |
+| T-033 | #38 | 送信導線の E2E（`page.route` のモックで実送信なし）、README / ARCHITECTURE を第 2 段階に更新 |
+
+## 8. セキュリティ（第 2 段階）
+
+- **鍵ファイルの読み取り**: `sessions/<pid>.<64 hex>.key` を読むのは `src/server/sources/claude/messaging.ts` の 1 経路だけ（grep で確認）。送信の瞬間だけ読み、`peerToken` を認証行に使い、戻り値・エラー・ログ・API 応答・テストに値を出さない。`running.ts` はコメントで「読まない」と明示し、`safe-path.ts` の `*.key` 除外はこの 1 経路以外で有効。
+- **送信先の限定**: 索引が `state: "running"` かつ `tool: "claude"` かつ稼働メタ由来の `messagingSocketPath` を持つセッションだけ。パイプ名は `\.\pipe\LOCAL\cc-msg-` 前置きの厳密一致を 2 か所（採用時と接続前）で検証。ユーザー入力からパス・パイプ名を組み立てない。
+- **課金・外部送信**: 配信されると受信側で使用量が発生する旨を README と API の `note` に明記。送信は同一マシン上の名前付きパイプで、ネットワーク越しの外部送信ではない（ARCHITECTURE §7）。
+- **安全側の二重化**: 既定は読み取り専用。UI は読み取り専用トグル OFF + 確認ダイアログの 2 段階。ストアの `sendMessage` も `readOnly` / 不正 key / Codex 宛では API を呼ばずエラーにする。
+- **ログ**: 送信 API のログは `{ tool, ok }` / `{ tool, code }` のみ（本文・パイプ名・実パス・トークンを出さない。実機で確認）。
+
+## 9. 品質ゲート（第 2 段階完了時）
+
+- `pnpm gate`: typecheck 0 / biome 192 ファイル 0 / vitest 74 ファイル 1689 件 pass / build 成功
+- `pnpm e2e`: 6 件 pass（既存 5 + 送信導線 1）
+- grep: TODO / FIXME / `console.` / `any` / feature 間 import / routes → sources の値 import / CSS Modules の生値はすべて 0 件
+
+## 10. Codex 送信と第 3 段階
+
+- Codex 宛の送信（`codex queue`、ADR-0009 選択肢 E）は利用者が Codex を契約しておらず実機検証できないため、第 2 段階の範囲外。UI の宛先セレクトに Codex は出ない。
+- 停止中セッションへの `--resume` / `codex exec resume` 再開（並行書き込みと課金のリスクあり）は第 3 段階以降で別 ADR を起票する。
+
+## 11. 完了の定義（第 2 段階）
+
+- [x] TASKS.md の全 33 タスクが `done`（T-030〜T-033）
+- [x] 全タスクが PR としてマージ済み（#35〜#38）
+- [x] `.key` の読み取り経路が 1 か所に限定され、値が外部に出ないことを確認
+- [x] 送信は稼働中の Claude セッションのみ。既定 read-only + 確認ダイアログの 2 段階
+- [x] README / ARCHITECTURE が第 2 段階の実装と一致
+- [x] 品質ゲートと E2E が通る
+
