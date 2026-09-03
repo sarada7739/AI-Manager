@@ -103,6 +103,8 @@ function makeFakeIndex(options?: {
     getAccounts: () => accounts,
     getWarnings: () => warnings,
     isProcessInfoAvailable: () => processInfoAvailable,
+    // 送信 API（T-031）は message-api.test.ts で検証する。ここでは常に「送信対象なし」。
+    getMessagingTarget: () => undefined,
   };
 }
 
@@ -164,6 +166,8 @@ function makeDeps(
     refresh,
     readClaudeDetail: defaultReadClaudeDetail,
     readCodexDetail: defaultReadCodexDetail,
+    // `AppDeps.sendClaudeMessage` も必須（T-031）。このファイルでは送信を検証しないため無害なフェイク。
+    sendClaudeMessage: async () => ok({ sentAt: "2026-01-01T00:00:00.000Z" }),
     ...overrides,
   };
 }

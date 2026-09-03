@@ -51,6 +51,11 @@ export interface IndexedSession {
   root: string;
   /** file.mtime の生値（重複セッションの新旧比較に使う）。 */
   mtimeMs: number;
+  /**
+   * 稼働メタ由来の名前付きパイプ（ADR-0009）。Claude 以外・メタが無い・形式不正のときは null。
+   * `SessionSummary` には載せない（API の一覧に出さない。T-031）。
+   */
+  messagingSocketPath: string | null;
 }
 
 /** 文字列の末尾を省略し「…」で終える形で max 文字に収める（先頭を残す。folder 表示用の truncateStart とは逆向き）。 */
@@ -241,7 +246,13 @@ export function buildClaudeFailedSummary(
     subagentCount: file.subagentCount,
     released: file.released,
   };
-  return { summary, jsonlPath: file.jsonlPath, root, mtimeMs: file.mtime };
+  return {
+    summary,
+    jsonlPath: file.jsonlPath,
+    root,
+    mtimeMs: file.mtime,
+    messagingSocketPath: meta?.messagingSocketPath ?? null,
+  };
 }
 
 /** 1 件の Claude セッション（head/tail 読み取り〜状態判定まで）を組み立てる。例外は投げない想定（呼び出し側が保険をかける）。 */
@@ -315,7 +326,13 @@ export async function buildClaudeSession(
     released: file.released,
   };
 
-  return { summary, jsonlPath: file.jsonlPath, root, mtimeMs: file.mtime };
+  return {
+    summary,
+    jsonlPath: file.jsonlPath,
+    root,
+    mtimeMs: file.mtime,
+    messagingSocketPath: meta?.messagingSocketPath ?? null,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -358,7 +375,14 @@ export function buildCodexFailedSummary(file: CodexSessionFile, root: string): I
     subagentCount: 0,
     released: false,
   };
-  return { summary, jsonlPath: file.jsonlPath, root, mtimeMs: file.mtime };
+  return {
+    summary,
+    jsonlPath: file.jsonlPath,
+    root,
+    mtimeMs: file.mtime,
+    // Codex には稼働メタ（sessions/<pid>.json 相当）が無いため、常に null。
+    messagingSocketPath: null,
+  };
 }
 
 /** FILETIME（100ns 単位）を epoch ms に変換する（ADR-0003 の Codex 稼働判定で使う）。 */
@@ -478,5 +502,12 @@ export async function buildCodexSession(params: BuildCodexSessionParams): Promis
     released: false,
   };
 
-  return { summary, jsonlPath: file.jsonlPath, root, mtimeMs: file.mtime };
+  return {
+    summary,
+    jsonlPath: file.jsonlPath,
+    root,
+    mtimeMs: file.mtime,
+    // Codex には稼働メタ（sessions/<pid>.json 相当）が無いため、常に null。
+    messagingSocketPath: null,
+  };
 }

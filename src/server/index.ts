@@ -6,6 +6,7 @@ import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { createLogger } from "./log.js";
 import { readClaudeDetail } from "./sources/claude/detail.js";
+import { sendClaudeMessage } from "./sources/claude/messaging.js";
 import { readCodexDetail } from "./sources/codex/detail.js";
 import { createEventHub, createIndexGate, createSerializedRefresh } from "./store/events.js";
 import { SessionIndex } from "./store/index.js";
@@ -67,6 +68,7 @@ async function main(): Promise<void> {
     refresh,
     readClaudeDetail,
     readCodexDetail,
+    sendClaudeMessage,
   });
 
   // 成功ログは listen 完了のコールバックで出す（listen 失敗時に成功ログが先に出ないように）
