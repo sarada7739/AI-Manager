@@ -346,3 +346,60 @@ describe("loadConfig", () => {
     });
   });
 });
+
+describe("loadConfig: 環境変数 AI_MANAGER_CONFIG_PATH による設定パスの上書き", () => {
+  let tmpDir: string;
+  let originalEnv: string | undefined;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-manager-config-env-test-"));
+    originalEnv = process.env.AI_MANAGER_CONFIG_PATH;
+  });
+
+  afterEach(() => {
+    if (originalEnv === undefined) {
+      delete process.env.AI_MANAGER_CONFIG_PATH;
+    } else {
+      process.env.AI_MANAGER_CONFIG_PATH = originalEnv;
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("configPath を省略すると環境変数のパスが読まれる（E2E が合成 roots を指すための経路）", () => {
+    const envPath = path.join(tmpDir, "env-config.json");
+    const root = path.join(tmpDir, "synthetic-root");
+    fs.writeFileSync(envPath, JSON.stringify({ roots: [root], port: 4444 }), "utf-8");
+    process.env.AI_MANAGER_CONFIG_PATH = envPath;
+
+    const result = loadConfig({ homeDir: "C:Userssomeone" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.roots).toEqual([root]);
+    expect(result.value.port).toBe(4444);
+  });
+
+  it("configPath を明示した場合は環境変数より引数が優先される", () => {
+    const envPath = path.join(tmpDir, "env-config.json");
+    const argPath = path.join(tmpDir, "arg-config.json");
+    fs.writeFileSync(envPath, JSON.stringify({ port: 4444 }), "utf-8");
+    fs.writeFileSync(argPath, JSON.stringify({ port: 5555 }), "utf-8");
+    process.env.AI_MANAGER_CONFIG_PATH = envPath;
+
+    const result = loadConfig({ configPath: argPath, homeDir: "C:Userssomeone" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.port).toBe(5555);
+  });
+
+  it("環境変数のパスにファイルが無ければ既定値で ok を返す（実パスを message に含めない）", () => {
+    process.env.AI_MANAGER_CONFIG_PATH = path.join(tmpDir, "missing.json");
+
+    const result = loadConfig({ homeDir: "C:Userssomeone" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.port).toBe(4317);
+  });
+});

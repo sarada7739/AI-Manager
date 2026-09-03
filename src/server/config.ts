@@ -19,7 +19,7 @@ export interface AppConfig {
    * とどめる。`src/server/sources/fs/safe-path.ts` の isUnderRoot を参照）。
    */
   roots: readonly string[];
-  /** この分数以内に更新があれば「稼働中」とみなす稼働判定の窓（分）。 */
+  /** この分数以内に更新があれば「作業中」とみなす稼働判定の窓（分）。 */
   activeWindowMinutes: number;
   /** ポーリングによる再走査の間隔（秒）。 */
   pollIntervalSec: number;
@@ -56,7 +56,7 @@ export const DEFAULT_CONFIG: AppConfig = Object.freeze({
 
 /** `loadConfig` のオプション。 */
 export interface LoadConfigOptions {
-  /** 設定ファイルのパス。既定は `<cwd>/local-data/config.json`。 */
+  /** 設定ファイルのパス。既定は環境変数 `AI_MANAGER_CONFIG_PATH`、無ければ `<cwd>/local-data/config.json`。 */
   configPath?: string;
   /** ホームディレクトリ。`roots` 内の `~` 展開と既定値の組み立てに使う。既定は `os.homedir()`（テストでの差し替え用）。 */
   homeDir?: string;
@@ -104,7 +104,11 @@ function isPositiveInteger(value: number): boolean {
  */
 export function loadConfig(opts?: LoadConfigOptions): Result<AppConfig> {
   const homeDir = opts?.homeDir ?? os.homedir();
-  const configPath = opts?.configPath ?? path.join(process.cwd(), "local-data", "config.json");
+  // 優先順: 引数 > 環境変数 AI_MANAGER_CONFIG_PATH（E2E が合成フィクスチャの roots を指すために使う）> 既定
+  const configPath =
+    opts?.configPath ??
+    process.env.AI_MANAGER_CONFIG_PATH ??
+    path.join(process.cwd(), "local-data", "config.json");
   const defaults = buildDefaultConfig(homeDir);
 
   let raw: string;
