@@ -9,3 +9,6 @@
 *.ico binary
 *.woff binary
 *.woff2 binary
+
+# cmd.exe のバッチは CRLF で保存する（LF だと行継続 ^ の解釈が崩れることがある）
+*.cmd text eol=crlf
